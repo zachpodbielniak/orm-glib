@@ -1,0 +1,60 @@
+# Build output
+build/
+*.o
+*.a
+*.so
+*.so.*
+*.gir
+*.typelib
+
+# Editor files
+*~
+*.swp
+*.swo
+.*.swp
+\#*\#
+.#*
+
+# IDE directories
+.idea/
+.vscode/
+*.sublime-*
+
+# Compilation databases
+compile_commands.json
+.cache/
+
+# Core dumps
+core
+core.*
+vgcore.*
+
+# Coverage data
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# Tags
+tags
+TAGS
+.tags
+
+# Test output
+test-results/
+*.log
+
+# Generated pkg-config file
+*.pc
+!*.pc.in
+
+# Backup files
+*.bak
+*.orig
+
+# macOS
+.DS_Store
+
+# Temporary files
+tmp/
+temp/

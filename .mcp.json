@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "gdb": {
+      "type": "stdio",
+      "command": "/var/home/zach/Source/Projects/mcp-gdb-glib/build/gdb-mcp-server",
+      "args": [],
+      "env": {}
+    }
+  }
+}

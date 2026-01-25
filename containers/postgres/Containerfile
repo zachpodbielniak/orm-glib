@@ -1,0 +1,21 @@
+# Containerfile - PostgreSQL test container for orm-glib
+#
+# Copyright 2025 Zach Pobiel
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Build and run:
+#   podman build -t orm-postgres -f Containerfile .
+#   podman run -d --name orm-postgres -p 15432:5432 orm-postgres
+#
+# Connection URL:
+#   postgresql://orm_test:orm_test_pass@localhost:15432/orm_test
+
+FROM docker.io/library/postgres:16-alpine
+
+ENV POSTGRES_USER=orm_test
+ENV POSTGRES_PASSWORD=orm_test_pass
+ENV POSTGRES_DB=orm_test
+
+COPY init.sql /docker-entrypoint-initdb.d/
+
+EXPOSE 5432

@@ -1,0 +1,10 @@
+prefix=@prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: orm-glib
+Description: GObject/GLib ORM library inspired by SQLAlchemy
+Version: @VERSION@
+Requires: glib-2.0 gobject-2.0 gio-2.0
+Libs: -L${libdir} -lorm-glib-@API_VERSION@
+Cflags: -I${includedir}

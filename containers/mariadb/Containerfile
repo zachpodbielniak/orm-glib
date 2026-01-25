@@ -1,0 +1,22 @@
+# Containerfile - MariaDB test container for orm-glib
+#
+# Copyright 2025 Zach Pobiel
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Build and run:
+#   podman build -t orm-mariadb -f Containerfile .
+#   podman run -d --name orm-mariadb -p 13306:3306 orm-mariadb
+#
+# Connection URL:
+#   mysql://orm_test:orm_test_pass@localhost:13306/orm_test
+
+FROM docker.io/library/mariadb:11-jammy
+
+ENV MARIADB_ROOT_PASSWORD=root_pass
+ENV MARIADB_USER=orm_test
+ENV MARIADB_PASSWORD=orm_test_pass
+ENV MARIADB_DATABASE=orm_test
+
+COPY init.sql /docker-entrypoint-initdb.d/
+
+EXPOSE 3306
