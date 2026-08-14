@@ -386,6 +386,38 @@ orm_connection_init (OrmConnection *self)
  *
  * Returns: (transfer full) (nullable): A new #OrmConnection, or %NULL on error
  */
+
+/*
+ * Quotes a value for a libpq keyword/value connection string.
+ *
+ * libpq splits that string on whitespace, so a password containing a space
+ * silently becomes a truncated password plus a garbage keyword. Wrapping in
+ * single quotes and backslash-escaping quotes and backslashes is the
+ * encoding libpq documents for exactly this.
+ *
+ * Returns: (transfer full): the quoted value
+ */
+static gchar *
+orm_conninfo_quote (const gchar *value)
+{
+    GString     *quoted;
+    const gchar *c;
+
+    quoted = g_string_new ("'");
+
+    for (c = value; c != NULL && *c != '\0'; c++)
+    {
+        if (*c == '\'' || *c == '\\')
+            g_string_append_c (quoted, '\\');
+
+        g_string_append_c (quoted, *c);
+    }
+
+    g_string_append_c (quoted, '\'');
+
+    return g_string_free (quoted, FALSE);
+}
+
 OrmConnection *
 orm_connection_new (OrmEngine  *engine,
                     GError    **error)
@@ -449,24 +481,39 @@ orm_connection_new (OrmEngine  *engine,
             pass = orm_engine_get_password (engine);
             dbname = orm_engine_get_database (engine);
 
-            /* Build connection string */
-            if (pass != NULL)
+            /*
+             * Build the connection string. Every value is quoted: libpq
+             * splits this on whitespace, so an unquoted password with a
+             * space in it becomes a truncated password and a stray
+             * keyword, and the resulting error says nothing useful.
+             */
             {
-                conninfo = g_strdup_printf (
-                    "host=%s port=%d dbname=%s user=%s password=%s",
-                    host, port, dbname, user, pass);
-            }
-            else if (user != NULL)
-            {
-                conninfo = g_strdup_printf (
-                    "host=%s port=%d dbname=%s user=%s",
-                    host, port, dbname, user);
-            }
-            else
-            {
-                conninfo = g_strdup_printf (
-                    "host=%s port=%d dbname=%s",
-                    host, port, dbname);
+                g_autofree gchar *q_host = orm_conninfo_quote (host);
+                g_autofree gchar *q_dbname = orm_conninfo_quote (dbname);
+                g_autofree gchar *q_user = NULL;
+                g_autofree gchar *q_pass = NULL;
+
+                if (pass != NULL)
+                {
+                    q_user = orm_conninfo_quote (user);
+                    q_pass = orm_conninfo_quote (pass);
+                    conninfo = g_strdup_printf (
+                        "host=%s port=%d dbname=%s user=%s password=%s",
+                        q_host, port, q_dbname, q_user, q_pass);
+                }
+                else if (user != NULL)
+                {
+                    q_user = orm_conninfo_quote (user);
+                    conninfo = g_strdup_printf (
+                        "host=%s port=%d dbname=%s user=%s",
+                        q_host, port, q_dbname, q_user);
+                }
+                else
+                {
+                    conninfo = g_strdup_printf (
+                        "host=%s port=%d dbname=%s",
+                        q_host, port, q_dbname);
+                }
             }
 
             self->pg_conn = PQconnectdb (conninfo);
