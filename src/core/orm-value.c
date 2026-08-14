@@ -385,6 +385,39 @@ gboolean
 orm_value_get_boolean (const OrmValue *value)
 {
     g_return_val_if_fail (value != NULL, FALSE);
+
+    /*
+     * SQLite has no boolean storage class: a value written as a boolean
+     * comes back as an integer 0 or 1, and MySQL's BOOL is likewise an
+     * alias for TINYINT. Asserting on the type here made it impossible to
+     * read back any boolean column on those backends, so an integer is
+     * accepted and interpreted the way every SQL engine does.
+     */
+    if (value->type == ORM_VALUE_INTEGER)
+    {
+        return value->data.v_integer != 0;
+    }
+
+    /*
+     * PostgreSQL renders booleans as "t"/"f" over the text protocol, and
+     * some drivers hand back "true"/"false" or "1"/"0".
+     */
+    if (value->type == ORM_VALUE_STRING)
+    {
+        const gchar *text = value->data.v_string;
+
+        if (text == NULL)
+        {
+            return FALSE;
+        }
+
+        return (g_ascii_strcasecmp (text, "t") == 0) ||
+               (g_ascii_strcasecmp (text, "true") == 0) ||
+               (g_ascii_strcasecmp (text, "y") == 0) ||
+               (g_ascii_strcasecmp (text, "yes") == 0) ||
+               (g_strcmp0 (text, "1") == 0);
+    }
+
     g_return_val_if_fail (value->type == ORM_VALUE_BOOLEAN, FALSE);
 
     return value->data.v_boolean;
