@@ -23,6 +23,10 @@
 #include "orm-dialect.h"
 #ifdef ORM_ENABLE_SQLITE
 #include "sqlite/orm-sqlite-dialect.h"
+
+#ifdef ORM_ENABLE_POSTGRES
+#include "postgres/orm-postgres-dialect.h"
+#endif
 #endif
 
 /*
@@ -444,8 +448,7 @@ orm_dialect_for_type (OrmDialectType type)
 
     case ORM_DIALECT_POSTGRES:
 #ifdef ORM_ENABLE_POSTGRES
-        /* Will be implemented when PostgreSQL dialect is created */
-        return NULL;
+        return ORM_DIALECT (orm_postgres_dialect_new ());
 #else
         g_warning ("PostgreSQL dialect not enabled at compile time");
         return NULL;
