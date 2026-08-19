@@ -49,6 +49,66 @@ extern const gchar * orm_engine_get_username (OrmEngine *engine);
 extern const gchar * orm_engine_get_password (OrmEngine *engine);
 extern const gchar * orm_engine_get_database (OrmEngine *engine);
 
+/*
+ * PostgreSQL identifies types by OID, and resolving one to a name means
+ * asking the server (format_type, or a pg_type lookup).  That is a round
+ * trip per column, on a connection the caller is probably about to use
+ * for something else, to answer a question about metadata -- so the
+ * common types are answered from this table instead and anything else
+ * reports its bare OID.
+ *
+ * The OIDs are fixed: they are assigned in the catalog at initdb time
+ * for built-in types and have been stable across every release.
+ */
+typedef struct
+{
+    Oid           oid;
+    const gchar  *name;
+    OrmValueType  value_type;
+} OrmPostgresTypeInfo;
+
+static const OrmPostgresTypeInfo orm_postgres_types[] = {
+    {   16, "boolean",                     ORM_VALUE_BOOLEAN  },
+    {   17, "bytea",                       ORM_VALUE_BLOB     },
+    {   18, "char",                        ORM_VALUE_STRING   },
+    {   19, "name",                        ORM_VALUE_STRING   },
+    {   20, "bigint",                      ORM_VALUE_INTEGER  },
+    {   21, "smallint",                    ORM_VALUE_INTEGER  },
+    {   23, "integer",                     ORM_VALUE_INTEGER  },
+    {   25, "text",                        ORM_VALUE_STRING   },
+    {   26, "oid",                         ORM_VALUE_INTEGER  },
+    {  114, "json",                        ORM_VALUE_STRING   },
+    {  700, "real",                        ORM_VALUE_FLOAT    },
+    {  701, "double precision",            ORM_VALUE_FLOAT    },
+    {  705, "unknown",                     ORM_VALUE_STRING   },
+    { 1042, "character",                   ORM_VALUE_STRING   },
+    { 1043, "character varying",           ORM_VALUE_STRING   },
+    { 1082, "date",                        ORM_VALUE_DATETIME },
+    { 1083, "time without time zone",      ORM_VALUE_STRING   },
+    { 1114, "timestamp without time zone", ORM_VALUE_DATETIME },
+    { 1184, "timestamp with time zone",    ORM_VALUE_DATETIME },
+    { 1186, "interval",                    ORM_VALUE_STRING   },
+    { 1266, "time with time zone",         ORM_VALUE_STRING   },
+    { 1700, "numeric",                     ORM_VALUE_FLOAT    },
+    { 2950, "uuid",                        ORM_VALUE_STRING   },
+    { 3802, "jsonb",                       ORM_VALUE_STRING   },
+    {    0, NULL,                          ORM_VALUE_NULL     }
+};
+
+static const OrmPostgresTypeInfo *
+orm_postgres_type_for_oid (Oid oid)
+{
+    gint i;
+
+    for (i = 0; orm_postgres_types[i].name != NULL; i++)
+    {
+        if (orm_postgres_types[i].oid == oid)
+            return &orm_postgres_types[i];
+    }
+
+    return NULL;
+}
+
 /* ------------------------------------------------------------------ */
 /* Result                                                             */
 /* ------------------------------------------------------------------ */
@@ -65,6 +125,13 @@ struct _OrmPostgresDriverResult
     PGresult        *result;
     gint             row_count;
     gint             current_row;
+
+    /*
+     * Names for OIDs the table does not carry, built on demand.
+     * Owned here because get_column_type_name is (transfer none) and the
+     * caller therefore needs the string to outlive the call.
+     */
+    GHashTable      *unknown_type_names;
 };
 
 G_DEFINE_FINAL_TYPE (OrmPostgresDriverResult, orm_postgres_driver_result,
@@ -145,6 +212,57 @@ orm_postgres_driver_result_get_column_name (OrmDriverResult *result,
     return PQfname (self->result, index);
 }
 
+static OrmValueType
+orm_postgres_driver_result_get_column_value_type (OrmDriverResult *result,
+                                                  gint             index)
+{
+    OrmPostgresDriverResult   *self = ORM_POSTGRES_DRIVER_RESULT (result);
+    const OrmPostgresTypeInfo *info;
+
+    if (self->result == NULL || index < 0 || index >= PQnfields (self->result))
+        return ORM_VALUE_NULL;
+
+    info = orm_postgres_type_for_oid (PQftype (self->result, index));
+
+    /*
+     * An OID we do not recognise is almost always a user-defined type or
+     * an array, and PostgreSQL hands those over as text.
+     */
+    return (info != NULL) ? info->value_type : ORM_VALUE_STRING;
+}
+
+static const gchar *
+orm_postgres_driver_result_get_column_type_name (OrmDriverResult *result,
+                                                 gint             index)
+{
+    OrmPostgresDriverResult   *self = ORM_POSTGRES_DRIVER_RESULT (result);
+    const OrmPostgresTypeInfo *info;
+    Oid                        oid;
+    gchar                     *name;
+
+    if (self->result == NULL || index < 0 || index >= PQnfields (self->result))
+        return NULL;
+
+    oid = PQftype (self->result, index);
+
+    info = orm_postgres_type_for_oid (oid);
+    if (info != NULL)
+        return info->name;
+
+    if (self->unknown_type_names == NULL)
+        self->unknown_type_names = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+                                                          NULL, g_free);
+
+    name = g_hash_table_lookup (self->unknown_type_names, GUINT_TO_POINTER (oid));
+    if (name == NULL)
+    {
+        name = g_strdup_printf ("oid:%u", (guint) oid);
+        g_hash_table_insert (self->unknown_type_names, GUINT_TO_POINTER (oid), name);
+    }
+
+    return name;
+}
+
 static OrmRow *
 orm_postgres_driver_result_fetch_row (OrmDriverResult  *result,
                                       GError          **error)
@@ -193,6 +311,8 @@ orm_postgres_driver_result_close (OrmDriverResult *result)
         self->result = NULL;
     }
 
+    g_clear_pointer (&self->unknown_type_names, g_hash_table_unref);
+
     self->row_count = 0;
 }
 
@@ -214,6 +334,8 @@ orm_postgres_driver_result_class_init (OrmPostgresDriverResultClass *klass)
 
     result_class->get_column_count = orm_postgres_driver_result_get_column_count;
     result_class->get_column_name = orm_postgres_driver_result_get_column_name;
+    result_class->get_column_value_type = orm_postgres_driver_result_get_column_value_type;
+    result_class->get_column_type_name = orm_postgres_driver_result_get_column_type_name;
     result_class->fetch_row = orm_postgres_driver_result_fetch_row;
     result_class->close = orm_postgres_driver_result_close;
 }

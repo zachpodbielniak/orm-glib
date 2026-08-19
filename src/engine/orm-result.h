@@ -91,13 +91,42 @@ const GError * orm_result_get_error (OrmResult *self);
 gint orm_result_get_column_count (OrmResult *self);
 
 /*
+ * orm_result_get_column_type:
+ * @self: An #OrmResult
+ * @index: Zero-based column index
+ *
+ * Gets the value type a column's values decode to, from the column's
+ * declared type rather than from any particular row -- so a column of
+ * integers still reports %ORM_VALUE_INTEGER on the row where it is NULL.
+ *
+ * %ORM_VALUE_NULL means the backend could not say, which is the honest
+ * answer for a computed column.
+ *
+ * Returns: The #OrmValueType for the column
+ */
+OrmValueType orm_result_get_column_type (OrmResult *self,
+                                         gint       index);
+
+/*
+ * orm_result_get_column_type_name:
+ * @self: An #OrmResult
+ * @index: Zero-based column index
+ *
+ * Gets the backend's own name for a column's declared type, such as
+ * "VARCHAR(255)" or "BIGINT".  %NULL when the backend has none to give,
+ * which happens for computed columns.
+ *
+ * Returns: (transfer none) (nullable): The type name, or %NULL
+ */
+const gchar * orm_result_get_column_type_name (OrmResult *self,
+                                               gint       index);
+
+/*
  * orm_result_get_column_name:
  * @self: An #OrmResult
- * @index: Column index
+ * @index: Zero-based column index
  *
- * Gets the name of a column.
- *
- * Returns: (transfer none) (nullable): Column name
+ * Returns: (transfer none) (nullable): The column name
  */
 const gchar * orm_result_get_column_name (OrmResult *self,
                                           gint       index);

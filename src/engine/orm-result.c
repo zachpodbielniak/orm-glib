@@ -199,6 +199,53 @@ orm_result_get_column_count (OrmResult *self)
 }
 
 /**
+ * orm_result_get_column_type:
+ * @self: An #OrmResult
+ * @index: Zero-based column index
+ *
+ * Gets the value type a column's values decode to, taken from the
+ * column's declared type rather than from any particular row.  That
+ * distinction is the whole point: a per-row answer reports
+ * %ORM_VALUE_NULL for a NULL integer, which tells a caller nothing about
+ * the column and is exactly when it most needs to know.
+ *
+ * Returns: The #OrmValueType, or %ORM_VALUE_NULL when the backend cannot say
+ */
+OrmValueType
+orm_result_get_column_type (OrmResult *self,
+                            gint       index)
+{
+    g_return_val_if_fail (ORM_IS_RESULT (self), ORM_VALUE_NULL);
+
+    if (self->driver_result == NULL)
+        return ORM_VALUE_NULL;
+
+    return orm_driver_result_get_column_value_type (self->driver_result, index);
+}
+
+/**
+ * orm_result_get_column_type_name:
+ * @self: An #OrmResult
+ * @index: Zero-based column index
+ *
+ * Gets the backend's own name for a column's declared type, such as
+ * "VARCHAR(255)" or "BIGINT".
+ *
+ * Returns: (transfer none) (nullable): The type name, or %NULL
+ */
+const gchar *
+orm_result_get_column_type_name (OrmResult *self,
+                                 gint       index)
+{
+    g_return_val_if_fail (ORM_IS_RESULT (self), NULL);
+
+    if (self->driver_result == NULL)
+        return NULL;
+
+    return orm_driver_result_get_column_type_name (self->driver_result, index);
+}
+
+/**
  * orm_result_get_column_name:
  * @self: An #OrmResult
  * @index: Zero-based column index

@@ -87,13 +87,6 @@ G_DEFINE_FINAL_TYPE (OrmMysqlDriverResult, orm_mysql_driver_result,
                      ORM_TYPE_DRIVER_RESULT)
 
 /*
- * Turns one fetched row into an OrmRow.
- *
- * Every value arrives as text, so the column's declared type is what
- * decides how it is read back; the lengths array is what makes a blob
- * containing a NUL byte survive the trip.
- */
-/*
  * Turns one column's bytes into an OrmValue, using the field's declared
  * type to decide how to read them.
  *
@@ -207,6 +200,129 @@ orm_mysql_driver_result_get_column_name (OrmDriverResult *result,
     return fields[index].name;
 }
 
+/*
+ * Maps a MySQL field type onto a value type.  Kept beside the value
+ * conversion above so the two cannot disagree about what a column is.
+ */
+static OrmValueType
+orm_mysql_value_type_of (enum enum_field_types type)
+{
+    switch (type)
+    {
+    case MYSQL_TYPE_TINY:
+    case MYSQL_TYPE_SHORT:
+    case MYSQL_TYPE_LONG:
+    case MYSQL_TYPE_LONGLONG:
+    case MYSQL_TYPE_INT24:
+        return ORM_VALUE_INTEGER;
+
+    case MYSQL_TYPE_FLOAT:
+    case MYSQL_TYPE_DOUBLE:
+    case MYSQL_TYPE_DECIMAL:
+    case MYSQL_TYPE_NEWDECIMAL:
+        return ORM_VALUE_FLOAT;
+
+    case MYSQL_TYPE_BLOB:
+    case MYSQL_TYPE_TINY_BLOB:
+    case MYSQL_TYPE_MEDIUM_BLOB:
+    case MYSQL_TYPE_LONG_BLOB:
+        return ORM_VALUE_BLOB;
+
+    case MYSQL_TYPE_DATE:
+    case MYSQL_TYPE_DATETIME:
+    case MYSQL_TYPE_TIMESTAMP:
+    case MYSQL_TYPE_NEWDATE:
+        return ORM_VALUE_DATETIME;
+
+    default:
+        return ORM_VALUE_STRING;
+    }
+}
+
+/*
+ * Spells a field type the way the schema would.
+ *
+ * MySQL reports BOOLEAN as TINYINT(1) and has no way to say otherwise,
+ * so this reports what the server reports rather than guessing at intent.
+ */
+static const gchar *
+orm_mysql_type_name_of (const MYSQL_FIELD *field)
+{
+    switch (field->type)
+    {
+    case MYSQL_TYPE_TINY:        return "TINYINT";
+    case MYSQL_TYPE_SHORT:       return "SMALLINT";
+    case MYSQL_TYPE_INT24:       return "MEDIUMINT";
+    case MYSQL_TYPE_LONG:        return "INT";
+    case MYSQL_TYPE_LONGLONG:    return "BIGINT";
+    case MYSQL_TYPE_FLOAT:       return "FLOAT";
+    case MYSQL_TYPE_DOUBLE:      return "DOUBLE";
+    case MYSQL_TYPE_DECIMAL:
+    case MYSQL_TYPE_NEWDECIMAL:  return "DECIMAL";
+    case MYSQL_TYPE_DATE:
+    case MYSQL_TYPE_NEWDATE:     return "DATE";
+    case MYSQL_TYPE_TIME:        return "TIME";
+    case MYSQL_TYPE_DATETIME:    return "DATETIME";
+    case MYSQL_TYPE_TIMESTAMP:   return "TIMESTAMP";
+    case MYSQL_TYPE_YEAR:        return "YEAR";
+    case MYSQL_TYPE_STRING:      return "CHAR";
+    case MYSQL_TYPE_VAR_STRING:  return "VARCHAR";
+    case MYSQL_TYPE_TINY_BLOB:   return "TINYBLOB";
+    case MYSQL_TYPE_MEDIUM_BLOB: return "MEDIUMBLOB";
+    case MYSQL_TYPE_LONG_BLOB:   return "LONGBLOB";
+    case MYSQL_TYPE_BLOB:        return "BLOB";
+    case MYSQL_TYPE_JSON:        return "JSON";
+    case MYSQL_TYPE_ENUM:        return "ENUM";
+    case MYSQL_TYPE_SET:         return "SET";
+    case MYSQL_TYPE_BIT:         return "BIT";
+    case MYSQL_TYPE_NULL:        return "NULL";
+    default:                     return NULL;
+    }
+}
+
+/*
+ * Both accessors need the field array, which lives in the metadata even
+ * when the rows came out of a prepared statement.
+ */
+static const MYSQL_FIELD *
+orm_mysql_driver_result_field (OrmMysqlDriverResult *self,
+                               gint                  index)
+{
+    if (self->result == NULL)
+        return NULL;
+
+    if (index < 0 || (guint) index >= mysql_num_fields (self->result))
+        return NULL;
+
+    return &mysql_fetch_fields (self->result)[index];
+}
+
+static OrmValueType
+orm_mysql_driver_result_get_column_value_type (OrmDriverResult *result,
+                                               gint             index)
+{
+    const MYSQL_FIELD *field;
+
+    field = orm_mysql_driver_result_field (ORM_MYSQL_DRIVER_RESULT (result), index);
+    if (field == NULL)
+        return ORM_VALUE_NULL;
+
+    return orm_mysql_value_type_of (field->type);
+}
+
+static const gchar *
+orm_mysql_driver_result_get_column_type_name (OrmDriverResult *result,
+                                              gint             index)
+{
+    const MYSQL_FIELD *field;
+
+    field = orm_mysql_driver_result_field (ORM_MYSQL_DRIVER_RESULT (result), index);
+    if (field == NULL)
+        return NULL;
+
+    return orm_mysql_type_name_of (field);
+}
+
 static OrmRow *
 orm_mysql_driver_result_fetch_row (OrmDriverResult  *result,
                                    GError          **error)
@@ -284,6 +400,8 @@ orm_mysql_driver_result_class_init (OrmMysqlDriverResultClass *klass)
 
     result_class->get_column_count = orm_mysql_driver_result_get_column_count;
     result_class->get_column_name = orm_mysql_driver_result_get_column_name;
+    result_class->get_column_value_type = orm_mysql_driver_result_get_column_value_type;
+    result_class->get_column_type_name = orm_mysql_driver_result_get_column_type_name;
     result_class->fetch_row = orm_mysql_driver_result_fetch_row;
     result_class->close = orm_mysql_driver_result_close;
 }

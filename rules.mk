@@ -223,6 +223,7 @@ TEST_SRCS := \
 	tests/test-engine.c \
 	tests/test-dialect-factory.c \
 	tests/test-driver.c \
+	tests/test-result-types.c \
 	tests/test-isolation.c \
 	tests/test-dialect-sqlite.c \
 	tests/test-expression.c \

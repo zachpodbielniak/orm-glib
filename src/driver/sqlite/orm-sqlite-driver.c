@@ -26,6 +26,7 @@
 #include "../../dialect/sqlite/orm-sqlite-dialect.h"
 
 #include <sqlite3.h>
+#include <string.h>
 
 /*
  * The SQLite backend: driver, connection and result.
@@ -124,6 +125,98 @@ orm_sqlite_driver_result_get_column_name (OrmDriverResult *result,
     return sqlite3_column_name (self->stmt, index);
 }
 
+/*
+ * Maps a declared type name onto a value type using SQLite's own type
+ * affinity rules (the substring tests from its documentation, in the
+ * order it applies them).
+ *
+ * SQLite stores types per value, not per column, so the declared type is
+ * the only thing that describes a column as a whole -- and it is a free
+ * text string: "VARCHAR(80)", "BIG INT" and "nvarchar" are all things a
+ * schema can legitimately say.
+ */
+static OrmValueType
+orm_sqlite_affinity_of (const gchar *decl)
+{
+    g_autofree gchar *upper = NULL;
+
+    /*
+     * A column declared with no type at all has BLOB affinity.  This is
+     * not the same as having no declared type to read, which the caller
+     * handles before getting here.
+     */
+    if (*decl == '\0')
+        return ORM_VALUE_BLOB;
+
+    upper = g_ascii_strup (decl, -1);
+
+    if (strstr (upper, "INT") != NULL)
+        return ORM_VALUE_INTEGER;
+
+    if (strstr (upper, "CHAR") != NULL ||
+        strstr (upper, "CLOB") != NULL ||
+        strstr (upper, "TEXT") != NULL)
+        return ORM_VALUE_STRING;
+
+    if (strstr (upper, "BLOB") != NULL)
+        return ORM_VALUE_BLOB;
+
+    if (strstr (upper, "REAL") != NULL ||
+        strstr (upper, "FLOA") != NULL ||
+        strstr (upper, "DOUB") != NULL)
+        return ORM_VALUE_FLOAT;
+
+    /*
+     * Past this point SQLite would say NUMERIC.  These two are checked
+     * after the affinity rules rather than before because a column
+     * declared BOOLEAN or DATETIME has numeric affinity as far as SQLite
+     * is concerned, while orm-glib has real types for both.
+     */
+    if (strstr (upper, "BOOL") != NULL)
+        return ORM_VALUE_BOOLEAN;
+
+    if (strstr (upper, "DATE") != NULL || strstr (upper, "TIME") != NULL)
+        return ORM_VALUE_DATETIME;
+
+    return ORM_VALUE_FLOAT;
+}
+
+static OrmValueType
+orm_sqlite_driver_result_get_column_value_type (OrmDriverResult *result,
+                                                gint             index)
+{
+    OrmSqliteDriverResult *self = ORM_SQLITE_DRIVER_RESULT (result);
+    const gchar           *decl;
+
+    if (self->stmt == NULL)
+        return ORM_VALUE_NULL;
+
+    decl = sqlite3_column_decltype (self->stmt, index);
+
+    /*
+     * A computed column -- COUNT(*), an expression, a literal -- has no
+     * declared type at all, and sqlite3_column_decltype returns NULL.
+     * Saying "unknown" is the truthful answer; guessing from whatever the
+     * current row happens to hold would be wrong on the next row.
+     */
+    if (decl == NULL)
+        return ORM_VALUE_NULL;
+
+    return orm_sqlite_affinity_of (decl);
+}
+
+static const gchar *
+orm_sqlite_driver_result_get_column_type_name (OrmDriverResult *result,
+                                               gint             index)
+{
+    OrmSqliteDriverResult *self = ORM_SQLITE_DRIVER_RESULT (result);
+
+    if (self->stmt == NULL)
+        return NULL;
+
+    return sqlite3_column_decltype (self->stmt, index);
+}
+
 static OrmRow *
 orm_sqlite_driver_result_fetch_row (OrmDriverResult  *result,
                                     GError          **error)
@@ -205,6 +298,8 @@ orm_sqlite_driver_result_class_init (OrmSqliteDriverResultClass *klass)
 
     result_class->get_column_count = orm_sqlite_driver_result_get_column_count;
     result_class->get_column_name = orm_sqlite_driver_result_get_column_name;
+    result_class->get_column_value_type = orm_sqlite_driver_result_get_column_value_type;
+    result_class->get_column_type_name = orm_sqlite_driver_result_get_column_type_name;
     result_class->fetch_row = orm_sqlite_driver_result_fetch_row;
     result_class->close = orm_sqlite_driver_result_close;
 }
