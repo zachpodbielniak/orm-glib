@@ -31,6 +31,37 @@
 #include "../types/orm-text.h"
 
 /*
+ * GType registration for OrmPropertyFlags.  A bitmask, so it registers
+ * with g_flags_register_static and not g_enum_register_static -- the
+ * difference decides whether a binding can OR two values together.
+ */
+GType
+orm_property_flags_get_type (void)
+{
+    static volatile gsize g_define_type_id__volatile = 0;
+
+    if (g_once_init_enter (&g_define_type_id__volatile))
+    {
+        static const GFlagsValue values[] = {
+            { ORM_PROPERTY_NONE, "ORM_PROPERTY_NONE", "none" },
+            { ORM_PROPERTY_PRIMARY_KEY, "ORM_PROPERTY_PRIMARY_KEY", "primary-key" },
+            { ORM_PROPERTY_NULLABLE, "ORM_PROPERTY_NULLABLE", "nullable" },
+            { ORM_PROPERTY_UNIQUE, "ORM_PROPERTY_UNIQUE", "unique" },
+            { ORM_PROPERTY_AUTO_INCREMENT, "ORM_PROPERTY_AUTO_INCREMENT", "auto-increment" },
+            { ORM_PROPERTY_READ_ONLY, "ORM_PROPERTY_READ_ONLY", "read-only" },
+            { ORM_PROPERTY_DEFERRED, "ORM_PROPERTY_DEFERRED", "deferred" },
+            { 0, NULL, NULL }
+        };
+        GType g_define_type_id;
+
+        g_define_type_id = g_flags_register_static ("OrmPropertyFlags", values);
+        g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+    }
+
+    return g_define_type_id__volatile;
+}
+
+/*
  * OrmProperty - Property to column mapping.
  *
  * Maps a GObject property to a database column, storing the property name,

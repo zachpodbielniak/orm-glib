@@ -54,6 +54,10 @@ typedef enum {
     ORM_SORT_DESC
 } OrmSortOrder;
 
+GType orm_sort_order_get_type (void) G_GNUC_CONST;
+
+#define ORM_TYPE_SORT_ORDER (orm_sort_order_get_type ())
+
 /**
  * OrmQuery:
  *

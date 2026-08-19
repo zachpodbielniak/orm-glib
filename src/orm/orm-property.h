@@ -59,6 +59,10 @@ typedef enum {
     ORM_PROPERTY_DEFERRED       = 1 << 5
 } OrmPropertyFlags;
 
+GType orm_property_flags_get_type (void) G_GNUC_CONST;
+
+#define ORM_TYPE_PROPERTY_FLAGS (orm_property_flags_get_type ())
+
 /**
  * OrmProperty:
  *

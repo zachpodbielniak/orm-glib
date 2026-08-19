@@ -28,6 +28,36 @@
 #include "../core/orm-error.h"
 
 /*
+ * GType registration for OrmObjectState.
+ * Registered here rather than in core/orm-enums.c because the enum is
+ * declared in this module's header, and core must not include orm/.
+ */
+GType
+orm_object_state_get_type (void)
+{
+    static volatile gsize g_define_type_id__volatile = 0;
+
+    if (g_once_init_enter (&g_define_type_id__volatile))
+    {
+        static const GEnumValue values[] = {
+            { ORM_OBJECT_TRANSIENT, "ORM_OBJECT_TRANSIENT", "transient" },
+            { ORM_OBJECT_PENDING, "ORM_OBJECT_PENDING", "pending" },
+            { ORM_OBJECT_PERSISTENT, "ORM_OBJECT_PERSISTENT", "persistent" },
+            { ORM_OBJECT_DIRTY, "ORM_OBJECT_DIRTY", "dirty" },
+            { ORM_OBJECT_DELETED, "ORM_OBJECT_DELETED", "deleted" },
+            { ORM_OBJECT_DETACHED, "ORM_OBJECT_DETACHED", "detached" },
+            { 0, NULL, NULL }
+        };
+        GType g_define_type_id;
+
+        g_define_type_id = g_enum_register_static ("OrmObjectState", values);
+        g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+    }
+
+    return g_define_type_id__volatile;
+}
+
+/*
  * OrmSession - Unit of Work pattern implementation.
  *
  * Manages object state (new, dirty, deleted) and coordinates

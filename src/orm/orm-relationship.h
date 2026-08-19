@@ -54,6 +54,10 @@ typedef enum {
     ORM_LOAD_JOIN
 } OrmLoadStrategy;
 
+GType orm_load_strategy_get_type (void) G_GNUC_CONST;
+
+#define ORM_TYPE_LOAD_STRATEGY (orm_load_strategy_get_type ())
+
 /**
  * OrmCascade:
  * @ORM_CASCADE_NONE: No cascade behavior
@@ -69,6 +73,10 @@ typedef enum {
     ORM_CASCADE_DELETE = 1 << 1,
     ORM_CASCADE_ALL    = ORM_CASCADE_SAVE | ORM_CASCADE_DELETE
 } OrmCascade;
+
+GType orm_cascade_get_type (void) G_GNUC_CONST;
+
+#define ORM_TYPE_CASCADE (orm_cascade_get_type ())
 
 /**
  * OrmRelationship:

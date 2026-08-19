@@ -188,6 +188,7 @@ TEST_FIXTURE_SRCS := \
 TEST_SRCS := \
 	tests/test-value.c \
 	tests/test-types.c \
+	tests/test-enums.c \
 	tests/test-schema.c \
 	tests/test-engine.c \
 	tests/test-dialect-factory.c \

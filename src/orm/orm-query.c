@@ -30,6 +30,32 @@
 #include "../core/orm-error.h"
 
 /*
+ * GType registration for OrmSortOrder.
+ * Declared in this module's header, so it registers here (see the note
+ * in orm-session.c).
+ */
+GType
+orm_sort_order_get_type (void)
+{
+    static volatile gsize g_define_type_id__volatile = 0;
+
+    if (g_once_init_enter (&g_define_type_id__volatile))
+    {
+        static const GEnumValue values[] = {
+            { ORM_SORT_ASC, "ORM_SORT_ASC", "asc" },
+            { ORM_SORT_DESC, "ORM_SORT_DESC", "desc" },
+            { 0, NULL, NULL }
+        };
+        GType g_define_type_id;
+
+        g_define_type_id = g_enum_register_static ("OrmSortOrder", values);
+        g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+    }
+
+    return g_define_type_id__volatile;
+}
+
+/*
  * OrmQuery - High-level ORM query builder.
  *
  * Provides a fluent interface for building queries that return

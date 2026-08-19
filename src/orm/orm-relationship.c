@@ -23,6 +23,57 @@
 #include "orm-relationship.h"
 
 /*
+ * GType registration for OrmLoadStrategy (an enum) and OrmCascade (a
+ * bitmask, hence g_flags_register_static).  Both are declared in this
+ * module's header; see the note in orm-session.c.
+ */
+GType
+orm_load_strategy_get_type (void)
+{
+    static volatile gsize g_define_type_id__volatile = 0;
+
+    if (g_once_init_enter (&g_define_type_id__volatile))
+    {
+        static const GEnumValue values[] = {
+            { ORM_LOAD_LAZY, "ORM_LOAD_LAZY", "lazy" },
+            { ORM_LOAD_EAGER, "ORM_LOAD_EAGER", "eager" },
+            { ORM_LOAD_SELECT, "ORM_LOAD_SELECT", "select" },
+            { ORM_LOAD_JOIN, "ORM_LOAD_JOIN", "join" },
+            { 0, NULL, NULL }
+        };
+        GType g_define_type_id;
+
+        g_define_type_id = g_enum_register_static ("OrmLoadStrategy", values);
+        g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+    }
+
+    return g_define_type_id__volatile;
+}
+
+GType
+orm_cascade_get_type (void)
+{
+    static volatile gsize g_define_type_id__volatile = 0;
+
+    if (g_once_init_enter (&g_define_type_id__volatile))
+    {
+        static const GFlagsValue values[] = {
+            { ORM_CASCADE_NONE, "ORM_CASCADE_NONE", "none" },
+            { ORM_CASCADE_SAVE, "ORM_CASCADE_SAVE", "save" },
+            { ORM_CASCADE_DELETE, "ORM_CASCADE_DELETE", "delete" },
+            { ORM_CASCADE_ALL, "ORM_CASCADE_ALL", "all" },
+            { 0, NULL, NULL }
+        };
+        GType g_define_type_id;
+
+        g_define_type_id = g_flags_register_static ("OrmCascade", values);
+        g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+    }
+
+    return g_define_type_id__volatile;
+}
+
+/*
  * OrmRelationship - Entity relationship definition.
  *
  * Defines relationships between entity types, including foreign key

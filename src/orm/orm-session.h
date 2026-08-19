@@ -63,6 +63,10 @@ typedef enum {
     ORM_OBJECT_DETACHED
 } OrmObjectState;
 
+GType orm_object_state_get_type (void) G_GNUC_CONST;
+
+#define ORM_TYPE_OBJECT_STATE (orm_object_state_get_type ())
+
 /**
  * OrmSession:
  *
