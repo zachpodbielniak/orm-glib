@@ -41,6 +41,32 @@ DIALECT_SRCS := \
 	src/dialect/orm-type-compiler.c \
 	src/dialect/orm-ddl-compiler.c
 
+# Driver layer: backend I/O behind an abstraction, plus the scheme registry
+DRIVER_SRCS := \
+	src/driver/orm-driver.c \
+	src/driver/orm-driver-connection.c \
+	src/driver/orm-driver-result.c \
+	src/driver/orm-driver-registry.c
+
+# Per-backend drivers (conditional)
+ifeq ($(ENABLE_SQLITE),1)
+SQLITE_DRIVER_SRCS := src/driver/sqlite/orm-sqlite-driver.c
+else
+SQLITE_DRIVER_SRCS :=
+endif
+
+ifeq ($(ENABLE_POSTGRES),1)
+POSTGRES_DRIVER_SRCS := src/driver/postgres/orm-postgres-driver.c
+else
+POSTGRES_DRIVER_SRCS :=
+endif
+
+ifeq ($(ENABLE_MYSQL),1)
+MYSQL_DRIVER_SRCS := src/driver/mysql/orm-mysql-driver.c
+else
+MYSQL_DRIVER_SRCS :=
+endif
+
 # SQLite dialect (conditional)
 ifeq ($(ENABLE_SQLITE),1)
 SQLITE_DIALECT_SRCS := \
@@ -94,7 +120,7 @@ ORM_SRCS := \
 	src/orm/orm-query.c
 
 # All source files (Phase 1 through Phase 6)
-LIB_SRCS := $(CORE_SRCS) $(TYPES_SRCS) $(SCHEMA_SRCS) $(DIALECT_SRCS) $(SQLITE_DIALECT_SRCS) $(POSTGRES_DIALECT_SRCS) $(MYSQL_DIALECT_SRCS) $(SQL_SRCS) $(ENGINE_SRCS) $(ORM_SRCS)
+LIB_SRCS := $(CORE_SRCS) $(TYPES_SRCS) $(SCHEMA_SRCS) $(DIALECT_SRCS) $(SQLITE_DIALECT_SRCS) $(POSTGRES_DIALECT_SRCS) $(MYSQL_DIALECT_SRCS) $(DRIVER_SRCS) $(SQLITE_DRIVER_SRCS) $(POSTGRES_DRIVER_SRCS) $(MYSQL_DRIVER_SRCS) $(SQL_SRCS) $(ENGINE_SRCS) $(ORM_SRCS)
 
 # Object files
 LIB_OBJS := $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(LIB_SRCS))
@@ -124,6 +150,10 @@ PUBLIC_HEADERS_BASE := \
 	src/dialect/orm-dialect.h \
 	src/dialect/orm-type-compiler.h \
 	src/dialect/orm-ddl-compiler.h \
+	src/driver/orm-driver.h \
+	src/driver/orm-driver-connection.h \
+	src/driver/orm-driver-result.h \
+	src/driver/orm-driver-registry.h \
 	src/sql/orm-expression.h \
 	src/sql/orm-column-element.h \
 	src/sql/orm-table-clause.h \
@@ -192,6 +222,7 @@ TEST_SRCS := \
 	tests/test-schema.c \
 	tests/test-engine.c \
 	tests/test-dialect-factory.c \
+	tests/test-driver.c \
 	tests/test-isolation.c \
 	tests/test-dialect-sqlite.c \
 	tests/test-expression.c \

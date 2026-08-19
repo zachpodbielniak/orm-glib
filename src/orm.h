@@ -94,6 +94,12 @@
 #include "sql/orm-delete.h"
 
 /* Engine layer */
+/* Driver layer */
+#include "driver/orm-driver-result.h"
+#include "driver/orm-driver-connection.h"
+#include "driver/orm-driver.h"
+#include "driver/orm-driver-registry.h"
+
 #include "engine/orm-row.h"
 #include "engine/orm-result.h"
 #include "engine/orm-connection.h"

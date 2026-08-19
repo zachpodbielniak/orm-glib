@@ -231,6 +231,26 @@ typedef enum {
     ORM_ISOLATION_SERIALIZABLE
 } OrmIsolationLevel;
 
+/**
+ * OrmQueryFlags:
+ * @ORM_QUERY_FLAGS_NONE: No special handling
+ * @ORM_QUERY_FLAGS_STREAMING: Ask the backend to deliver rows incrementally
+ *
+ * Options for how a query's results are produced.
+ *
+ * Streaming is a request, not a guarantee. SQLite always streams because
+ * stepping a statement is how it works at all; PostgreSQL and MySQL
+ * materialize the whole result client-side unless asked otherwise, and
+ * asking costs something -- a streaming result holds the connection busy
+ * until it is drained or closed. So the flag is opt-in, for the caller
+ * who is about to read a million rows and does not want them all in
+ * memory first.
+ */
+typedef enum {
+    ORM_QUERY_FLAGS_NONE      = 0,
+    ORM_QUERY_FLAGS_STREAMING = 1 << 0
+} OrmQueryFlags;
+
 /* GType registration functions */
 GType orm_dialect_type_get_type (void) G_GNUC_CONST;
 GType orm_value_type_get_type (void) G_GNUC_CONST;
@@ -243,6 +263,7 @@ GType orm_foreign_key_action_get_type (void) G_GNUC_CONST;
 GType orm_relationship_type_get_type (void) G_GNUC_CONST;
 GType orm_session_state_get_type (void) G_GNUC_CONST;
 GType orm_isolation_level_get_type (void) G_GNUC_CONST;
+GType orm_query_flags_get_type (void) G_GNUC_CONST;
 
 #define ORM_TYPE_DIALECT_TYPE (orm_dialect_type_get_type ())
 #define ORM_TYPE_VALUE_TYPE (orm_value_type_get_type ())
@@ -255,6 +276,7 @@ GType orm_isolation_level_get_type (void) G_GNUC_CONST;
 #define ORM_TYPE_RELATIONSHIP_TYPE (orm_relationship_type_get_type ())
 #define ORM_TYPE_SESSION_STATE (orm_session_state_get_type ())
 #define ORM_TYPE_ISOLATION_LEVEL (orm_isolation_level_get_type ())
+#define ORM_TYPE_QUERY_FLAGS (orm_query_flags_get_type ())
 
 G_END_DECLS
 

@@ -39,7 +39,8 @@ GList *users = orm_query_all (query, &error);
 
 - [Getting Started](getting-started.md) - Installation and first steps
 - [Architecture](architecture.md) - Library design and components
-- [Dialects](dialects.md) - Database-specific information
+- [Dialects](dialects.md) - Database-specific SQL and type mapping
+- [Drivers](drivers.md) - Backend I/O, the scheme registry, and adding a database
 - [OrmSerializable](serializable.md) - Making GObjects persistable
 
 ## Building

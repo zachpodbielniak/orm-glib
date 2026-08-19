@@ -331,3 +331,28 @@ orm_isolation_level_get_type (void)
 
     return g_define_type_id__volatile;
 }
+
+/*
+ * GType registration for OrmQueryFlags.  A bitmask, hence flags rather
+ * than enum registration.
+ */
+GType
+orm_query_flags_get_type (void)
+{
+    static volatile gsize g_define_type_id__volatile = 0;
+
+    if (g_once_init_enter (&g_define_type_id__volatile))
+    {
+        static const GFlagsValue values[] = {
+            { ORM_QUERY_FLAGS_NONE, "ORM_QUERY_FLAGS_NONE", "none" },
+            { ORM_QUERY_FLAGS_STREAMING, "ORM_QUERY_FLAGS_STREAMING", "streaming" },
+            { 0, NULL, NULL }
+        };
+        GType g_define_type_id;
+
+        g_define_type_id = g_flags_register_static ("OrmQueryFlags", values);
+        g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+    }
+
+    return g_define_type_id__volatile;
+}
