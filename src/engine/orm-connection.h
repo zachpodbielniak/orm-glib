@@ -156,6 +156,45 @@ OrmTransaction * orm_connection_begin_transaction (OrmConnection  *self,
                                                    GError        **error);
 
 /*
+ * orm_connection_begin_transaction_with_isolation:
+ * @self: An #OrmConnection
+ * @level: The isolation level for this transaction only
+ * @error: Return location for error
+ *
+ * Begins a transaction at @level, leaving the session default untouched.
+ *
+ * Returns: (transfer full) (nullable): A new #OrmTransaction, or %NULL on error
+ */
+OrmTransaction * orm_connection_begin_transaction_with_isolation (OrmConnection      *self,
+                                                                  OrmIsolationLevel   level,
+                                                                  GError            **error);
+
+/*
+ * orm_connection_set_isolation_level:
+ * @self: An #OrmConnection
+ * @level: The isolation level to apply
+ * @error: Return location for error
+ *
+ * Sets the session-wide transaction isolation level.  SQLite supports only
+ * %ORM_ISOLATION_SERIALIZABLE and %ORM_ISOLATION_READ_UNCOMMITTED.
+ *
+ * Returns: %TRUE on success
+ */
+gboolean orm_connection_set_isolation_level (OrmConnection      *self,
+                                             OrmIsolationLevel   level,
+                                             GError            **error);
+
+/*
+ * orm_connection_get_isolation_level:
+ * @self: An #OrmConnection
+ *
+ * Gets the isolation level this connection is known to be using.
+ *
+ * Returns: The current #OrmIsolationLevel
+ */
+OrmIsolationLevel orm_connection_get_isolation_level (OrmConnection *self);
+
+/*
  * orm_connection_in_transaction:
  * @self: An #OrmConnection
  *

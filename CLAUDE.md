@@ -114,33 +114,82 @@ src/
 - [x] Schema definitions
 - [x] Build system
 
-### Phase 2 (Pending)
-- [ ] Dialect interface
-- [ ] SQLite dialect
-- [ ] Basic tests
+### Phase 2 (Complete)
+- [x] Dialect interface
+- [x] SQLite dialect
+- [x] Basic tests
 
-### Phase 3 (Pending)
-- [ ] SQL expression language
-- [ ] SELECT/INSERT/UPDATE/DELETE builders
+### Phase 3 (Complete)
+- [x] SQL expression language
+- [x] SELECT/INSERT/UPDATE/DELETE builders
 
-### Phase 4 (Pending)
-- [ ] Engine layer
-- [ ] Connection management
-- [ ] Transaction support
+### Phase 4 (Complete)
+- [x] Engine layer
+- [x] Connection management
+- [x] Transaction support (including savepoints and isolation levels)
 
-### Phase 5 (Pending)
-- [ ] OrmSerializable interface
-- [ ] Mapper and session
-- [ ] ORM queries
+### Phase 5 (Complete)
+- [x] OrmSerializable interface
+- [x] Mapper and session
+- [x] ORM queries
 
-### Phase 6 (Pending)
-- [ ] PostgreSQL dialect
-- [ ] MySQL dialect
+### Phase 6 (Complete)
+- [x] PostgreSQL dialect
+- [x] MySQL dialect
 
-### Phase 7 (Pending)
-- [ ] GObject introspection
-- [ ] Documentation
-- [ ] Examples
+### Phase 7 (Complete)
+- [x] GObject introspection
+- [x] Documentation
+- [x] Examples
+
+### Not implemented yet
+
+These are the gaps a caller notices, listed so nobody goes looking for an
+API that is not there:
+
+- **Schema introspection.** `orm_metadata_reflect()`, `create_all()` and
+  `drop_all()` are stubs that warn. Use the engine-level
+  `orm_engine_create_all()` / `orm_engine_drop_all()`, which are real.
+  There is no API to list tables, columns, indexes or foreign keys.
+- **Result column types.** `OrmResult` exposes column names and count only;
+  there is no declared-type metadata.
+- **Async.** Everything blocks. No `GTask`, no `GCancellable`, and the
+  library is not thread-safe: a connection belongs to one thread.
+- **Signals.** No type in the library emits any.
+- **Connection pooling.** Every `orm_engine_connect()` opens a new
+  connection, and `orm_engine_execute()` opens and closes one per call.
+- **Migrations.** No versioning and no `ALTER TABLE` in the DDL compiler.
+- **Text serialization.** `OrmSerializable` means object-to-row, not
+  object-to-JSON. There is no CSV or JSON output.
+
+## Build matrix
+
+The backend flags are independent, and all four combinations must build
+warning-free -- `-Werror` is on, so an unused static helper left behind by
+a disabled backend is a hard failure, not a nit:
+
+```bash
+make clean && make lib                                        # SQLite only (default)
+make clean && make lib ENABLE_SQLITE=0 ENABLE_POSTGRES=1
+make clean && make lib ENABLE_SQLITE=0 ENABLE_MYSQL=1
+make clean && make lib ENABLE_POSTGRES=1 ENABLE_MYSQL=1
+```
+
+Two traps this catches, both of which have bitten:
+
+1. **Guard helpers by the backend that uses them.** A `static` function
+   used only inside `#ifdef ORM_ENABLE_POSTGRES` must itself be inside that
+   guard, or the default SQLite-only build fails on
+   `-Werror=unused-function`.
+2. **Keep per-backend includes as siblings, never nested.** Nesting the
+   PostgreSQL include inside the SQLite guard makes
+   `ENABLE_SQLITE=0 ENABLE_POSTGRES=1` fail on a missing declaration.
+
+Header dependencies are tracked: the Makefile generates `.d` files and
+`-include`s them for the library objects, so editing a header rebuilds the
+modules that include it. Changing a *build flag* is what `.d` files cannot
+see -- `make clean` before switching backend flags, or objects compiled
+under the previous set linger.
 
 ## Testing
 

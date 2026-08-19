@@ -215,6 +215,42 @@ orm_foreign_key_set_on_update (fk, ORM_FK_SET_NULL);
 
 **Note:** SQLite requires `PRAGMA foreign_keys = ON` to enforce foreign keys.
 
+## Transaction Isolation
+
+Isolation is set either for the whole session or for a single transaction:
+
+```c
+/* Session-wide: governs every transaction started afterwards. */
+orm_connection_set_isolation_level (conn, ORM_ISOLATION_REPEATABLE_READ, &error);
+
+/* One transaction only; the session default is untouched. */
+tx = orm_connection_begin_transaction_with_isolation (
+         conn, ORM_ISOLATION_SERIALIZABLE, &error);
+```
+
+`orm_connection_get_isolation_level()` reports the level the connection is
+known to be using. It is tracked, not queried: it starts at the backend
+default and follows each successful set, so a level changed by raw SQL
+behind the library's back is not reflected.
+
+| Level | SQLite | PostgreSQL | MySQL/MariaDB |
+|-------|--------|------------|---------------|
+| `READ_UNCOMMITTED` | `PRAGMA read_uncommitted = 1` | yes | yes |
+| `READ_COMMITTED` | **`ORM_ERROR_NOT_SUPPORTED`** | yes (default) | yes |
+| `REPEATABLE_READ` | **`ORM_ERROR_NOT_SUPPORTED`** | yes | yes (default) |
+| `SERIALIZABLE` | yes (default; applied as a no-op) | yes | yes |
+
+SQLite has no isolation-level statement. It is serializable natively, so
+asking for `SERIALIZABLE` succeeds without touching the connection, and the
+two middle levels fail rather than silently giving you something other than
+what you asked for. A `begin_transaction_with_isolation` that cannot honour
+the level opens no transaction at all.
+
+The backends also disagree about ordering, which the implementation hides:
+MySQL's `SET TRANSACTION` configures the *next* transaction and must
+precede `BEGIN`, while PostgreSQL's must be the first statement *inside*
+the transaction.
+
 ## Custom Dialects
 
 To implement a custom dialect:

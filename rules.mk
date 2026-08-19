@@ -192,6 +192,7 @@ TEST_SRCS := \
 	tests/test-schema.c \
 	tests/test-engine.c \
 	tests/test-dialect-factory.c \
+	tests/test-isolation.c \
 	tests/test-dialect-sqlite.c \
 	tests/test-expression.c \
 	tests/test-select.c \

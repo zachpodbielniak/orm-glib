@@ -51,10 +51,11 @@ struct _OrmConnection
 {
     GObject parent_instance;
 
-    OrmEngine      *engine;       /* Weak reference */
-    OrmDialectType  dialect_type;
-    gboolean        is_open;
-    gboolean        in_transaction;
+    OrmEngine         *engine;       /* Weak reference */
+    OrmDialectType     dialect_type;
+    gboolean           is_open;
+    gboolean           in_transaction;
+    OrmIsolationLevel  isolation_level;  /* Cached; see orm_connection_set_isolation_level */
 
 #ifdef ORM_ENABLE_SQLITE
     sqlite3        *sqlite_db;
@@ -363,6 +364,7 @@ orm_connection_init (OrmConnection *self)
     self->engine = NULL;
     self->is_open = FALSE;
     self->in_transaction = FALSE;
+    self->isolation_level = ORM_ISOLATION_SERIALIZABLE;
 
 #ifdef ORM_ENABLE_SQLITE
     self->sqlite_db = NULL;
@@ -435,6 +437,20 @@ orm_connection_new (OrmEngine  *engine,
     self = g_object_new (ORM_TYPE_CONNECTION, NULL);
     self->engine = engine;  /* Weak reference */
     self->dialect_type = orm_engine_get_dialect_type (engine);
+
+    /* Each backend opens at its own documented default, not a common one. */
+    switch (self->dialect_type)
+    {
+    case ORM_DIALECT_POSTGRES:
+        self->isolation_level = ORM_ISOLATION_READ_COMMITTED;
+        break;
+    case ORM_DIALECT_MYSQL:
+        self->isolation_level = ORM_ISOLATION_REPEATABLE_READ;
+        break;
+    default:
+        self->isolation_level = ORM_ISOLATION_SERIALIZABLE;
+        break;
+    }
 
     dtype = self->dialect_type;
 
@@ -1033,6 +1049,205 @@ orm_connection_begin_transaction (OrmConnection  *self,
     g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
     return orm_transaction_new (self, error);
+}
+
+/*
+ * Spells an isolation level the way every SQL backend spells it.  The
+ * words are identical across PostgreSQL and MySQL, so one table serves
+ * both; SQLite does not accept them at all and is handled separately.
+ */
+static const gchar *
+orm_isolation_level_sql (OrmIsolationLevel level)
+{
+    switch (level)
+    {
+    case ORM_ISOLATION_READ_UNCOMMITTED:
+        return "READ UNCOMMITTED";
+    case ORM_ISOLATION_READ_COMMITTED:
+        return "READ COMMITTED";
+    case ORM_ISOLATION_REPEATABLE_READ:
+        return "REPEATABLE READ";
+    case ORM_ISOLATION_SERIALIZABLE:
+        return "SERIALIZABLE";
+    default:
+        return NULL;
+    }
+}
+
+/*
+ * Applies @level to @self.
+ *
+ * @for_next_transaction selects between the session-wide form and the form
+ * that affects only the transaction about to start.  The two backends
+ * disagree about ordering, which is why the caller cannot simply always
+ * emit the same statement: MySQL's SET TRANSACTION configures the *next*
+ * transaction and so must precede BEGIN, while PostgreSQL's must be the
+ * first statement *inside* the transaction.  See
+ * orm_connection_begin_transaction_with_isolation.
+ */
+static gboolean
+orm_connection_apply_isolation (OrmConnection      *self,
+                                OrmIsolationLevel   level,
+                                gboolean            for_next_transaction,
+                                GError            **error)
+{
+    const gchar      *words;
+    g_autofree gchar *sql = NULL;
+
+    words = orm_isolation_level_sql (level);
+    if (words == NULL)
+    {
+        g_set_error (error, ORM_ERROR, ORM_ERROR_INVALID_OPERATION,
+                     "Unknown isolation level: %d", (gint) level);
+        return FALSE;
+    }
+
+    switch (self->dialect_type)
+    {
+    case ORM_DIALECT_SQLITE:
+        /*
+         * SQLite has no isolation-level statement.  Its own behaviour is
+         * SERIALIZABLE, so asking for that is a no-op success rather than
+         * an error; READ UNCOMMITTED is reachable through a pragma, and
+         * the two levels in between simply do not exist here.
+         */
+        if (level == ORM_ISOLATION_SERIALIZABLE)
+            return TRUE;
+
+        if (level == ORM_ISOLATION_READ_UNCOMMITTED)
+            return orm_connection_execute (self, "PRAGMA read_uncommitted = 1", error);
+
+        g_set_error (error, ORM_ERROR, ORM_ERROR_NOT_SUPPORTED,
+                     "SQLite supports only SERIALIZABLE and READ UNCOMMITTED "
+                     "isolation, not %s", words);
+        return FALSE;
+
+    case ORM_DIALECT_POSTGRES:
+        sql = g_strdup_printf (for_next_transaction
+                               ? "SET TRANSACTION ISOLATION LEVEL %s"
+                               : "SET SESSION CHARACTERISTICS AS TRANSACTION "
+                                 "ISOLATION LEVEL %s",
+                               words);
+        return orm_connection_execute (self, sql, error);
+
+    case ORM_DIALECT_MYSQL:
+        sql = g_strdup_printf (for_next_transaction
+                               ? "SET TRANSACTION ISOLATION LEVEL %s"
+                               : "SET SESSION TRANSACTION ISOLATION LEVEL %s",
+                               words);
+        return orm_connection_execute (self, sql, error);
+
+    default:
+        g_set_error (error, ORM_ERROR, ORM_ERROR_NOT_SUPPORTED,
+                     "Isolation levels are not supported by this dialect");
+        return FALSE;
+    }
+}
+
+/**
+ * orm_connection_set_isolation_level:
+ * @self: An #OrmConnection
+ * @level: The isolation level to apply
+ * @error: Return location for error
+ *
+ * Sets the transaction isolation level for the whole session, so it
+ * governs every transaction started afterwards on this connection.
+ *
+ * SQLite accepts only %ORM_ISOLATION_SERIALIZABLE (its native behaviour,
+ * applied as a no-op) and %ORM_ISOLATION_READ_UNCOMMITTED; any other level
+ * fails with %ORM_ERROR_NOT_SUPPORTED.
+ *
+ * Returns: %TRUE on success
+ */
+gboolean
+orm_connection_set_isolation_level (OrmConnection      *self,
+                                    OrmIsolationLevel   level,
+                                    GError            **error)
+{
+    g_return_val_if_fail (ORM_IS_CONNECTION (self), FALSE);
+    g_return_val_if_fail (self->is_open, FALSE);
+    g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+    if (!orm_connection_apply_isolation (self, level, FALSE, error))
+        return FALSE;
+
+    self->isolation_level = level;
+    return TRUE;
+}
+
+/**
+ * orm_connection_get_isolation_level:
+ * @self: An #OrmConnection
+ *
+ * Gets the isolation level this connection is known to be using.
+ *
+ * The value is tracked rather than queried: it starts at the backend's
+ * documented default and follows every successful
+ * orm_connection_set_isolation_level(). A level changed behind the
+ * library's back -- by raw SQL, say -- is not reflected here.
+ *
+ * Returns: The current #OrmIsolationLevel
+ */
+OrmIsolationLevel
+orm_connection_get_isolation_level (OrmConnection *self)
+{
+    g_return_val_if_fail (ORM_IS_CONNECTION (self), ORM_ISOLATION_SERIALIZABLE);
+    return self->isolation_level;
+}
+
+/**
+ * orm_connection_begin_transaction_with_isolation:
+ * @self: An #OrmConnection
+ * @level: The isolation level for this transaction only
+ * @error: Return location for error
+ *
+ * Begins a transaction that runs at @level, leaving the session default
+ * untouched.
+ *
+ * Returns: (transfer full) (nullable): A new #OrmTransaction, or %NULL on error
+ */
+OrmTransaction *
+orm_connection_begin_transaction_with_isolation (OrmConnection      *self,
+                                                 OrmIsolationLevel   level,
+                                                 GError            **error)
+{
+    OrmTransaction *transaction;
+
+    g_return_val_if_fail (ORM_IS_CONNECTION (self), NULL);
+    g_return_val_if_fail (self->is_open, NULL);
+    g_return_val_if_fail (!self->in_transaction, NULL);
+    g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+    /*
+     * MySQL wants the level set before the transaction opens; PostgreSQL
+     * wants it as the transaction's first statement.  SQLite's pragma is
+     * connection-scoped and so belongs before BEGIN as well.
+     */
+    if (self->dialect_type != ORM_DIALECT_POSTGRES)
+    {
+        if (!orm_connection_apply_isolation (self, level, TRUE, error))
+            return NULL;
+
+        return orm_transaction_new (self, error);
+    }
+
+    transaction = orm_transaction_new (self, error);
+    if (transaction == NULL)
+        return NULL;
+
+    if (!orm_connection_apply_isolation (self, level, TRUE, error))
+    {
+        /*
+         * Roll back rather than hand back a transaction running at the
+         * wrong isolation level -- a caller that asked for SERIALIZABLE
+         * and silently got READ COMMITTED is the worst outcome here.
+         */
+        orm_transaction_rollback (transaction, NULL);
+        g_object_unref (transaction);
+        return NULL;
+    }
+
+    return transaction;
 }
 
 /**
