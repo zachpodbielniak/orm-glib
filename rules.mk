@@ -33,7 +33,9 @@ ENGINE_SRCS := \
 	src/engine/orm-connection.c \
 	src/engine/orm-transaction.c \
 	src/engine/orm-result.c \
-	src/engine/orm-row.c
+	src/engine/orm-row.c \
+	src/engine/orm-row-stream.c \
+	src/engine/orm-worker.c
 
 # Dialect base files
 DIALECT_SRCS := \
@@ -120,6 +122,12 @@ else
 MYSQL_INSPECT_SRCS :=
 endif
 
+# Export layer: writing a result set out as text
+EXPORT_SRCS := \
+	src/export/orm-exporter.c \
+	src/export/orm-csv-exporter.c \
+	src/export/orm-json-exporter.c
+
 # SQL expression language
 SQL_SRCS := \
 	src/sql/orm-expression.c \
@@ -143,7 +151,7 @@ ORM_SRCS := \
 	src/orm/orm-query.c
 
 # All source files (Phase 1 through Phase 6)
-LIB_SRCS := $(CORE_SRCS) $(TYPES_SRCS) $(SCHEMA_SRCS) $(DIALECT_SRCS) $(SQLITE_DIALECT_SRCS) $(POSTGRES_DIALECT_SRCS) $(MYSQL_DIALECT_SRCS) $(DRIVER_SRCS) $(SQLITE_DRIVER_SRCS) $(POSTGRES_DRIVER_SRCS) $(MYSQL_DRIVER_SRCS) $(INSPECT_SRCS) $(SQLITE_INSPECT_SRCS) $(POSTGRES_INSPECT_SRCS) $(MYSQL_INSPECT_SRCS) $(SQL_SRCS) $(ENGINE_SRCS) $(ORM_SRCS)
+LIB_SRCS := $(CORE_SRCS) $(TYPES_SRCS) $(SCHEMA_SRCS) $(DIALECT_SRCS) $(SQLITE_DIALECT_SRCS) $(POSTGRES_DIALECT_SRCS) $(MYSQL_DIALECT_SRCS) $(DRIVER_SRCS) $(SQLITE_DRIVER_SRCS) $(POSTGRES_DRIVER_SRCS) $(MYSQL_DRIVER_SRCS) $(INSPECT_SRCS) $(SQLITE_INSPECT_SRCS) $(POSTGRES_INSPECT_SRCS) $(MYSQL_INSPECT_SRCS) $(SQL_SRCS) $(ENGINE_SRCS) $(ORM_SRCS) $(EXPORT_SRCS)
 
 # Object files
 LIB_OBJS := $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(LIB_SRCS))
@@ -193,13 +201,17 @@ PUBLIC_HEADERS_BASE := \
 	src/engine/orm-transaction.h \
 	src/engine/orm-result.h \
 	src/engine/orm-row.h \
+	src/engine/orm-row-stream.h \
 	src/orm/orm-serializable.h \
 	src/orm/orm-property.h \
 	src/orm/orm-relationship.h \
 	src/orm/orm-mapper.h \
 	src/orm/orm-identity-map.h \
 	src/orm/orm-session.h \
-	src/orm/orm-query.h
+	src/orm/orm-query.h \
+	src/export/orm-exporter.h \
+	src/export/orm-csv-exporter.h \
+	src/export/orm-json-exporter.h
 
 # SQLite dialect headers (conditional)
 ifeq ($(ENABLE_SQLITE),1)
@@ -252,12 +264,14 @@ TEST_SRCS := \
 	tests/test-quoting.c \
 	tests/test-inspector.c \
 	tests/test-isolation.c \
+	tests/test-async.c \
 	tests/test-dialect-sqlite.c \
 	tests/test-expression.c \
 	tests/test-select.c \
 	tests/test-orm.c \
 	tests/test-session.c \
 	tests/test-query.c \
+	tests/test-export.c \
 	tests/test-integration.c
 
 TEST_BINS := $(patsubst tests/%.c,$(TEST_DIR)/%,$(TEST_SRCS))

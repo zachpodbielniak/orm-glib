@@ -232,6 +232,29 @@ typedef enum {
 } OrmIsolationLevel;
 
 /**
+ * OrmConnectionState:
+ * @ORM_CONNECTION_CLOSED: Not connected, and not going to be
+ * @ORM_CONNECTION_CONNECTING: Opening the backend connection
+ * @ORM_CONNECTION_IDLE: Open, with nothing in flight
+ * @ORM_CONNECTION_BUSY: Open, running an asynchronous operation
+ *
+ * The lifecycle of an #OrmConnection, as its "state-changed" signal
+ * reports it.
+ *
+ * The distinction that earns this enum is %ORM_CONNECTION_IDLE against
+ * %ORM_CONNECTION_BUSY: a connection runs one operation at a time, so a
+ * user interface that lets a second query be started while the first is
+ * still running has only queued it, and saying so is the difference
+ * between a responsive application and one that looks hung.
+ */
+typedef enum {
+    ORM_CONNECTION_CLOSED,
+    ORM_CONNECTION_CONNECTING,
+    ORM_CONNECTION_IDLE,
+    ORM_CONNECTION_BUSY
+} OrmConnectionState;
+
+/**
  * OrmQueryFlags:
  * @ORM_QUERY_FLAGS_NONE: No special handling
  * @ORM_QUERY_FLAGS_STREAMING: Ask the backend to deliver rows incrementally
@@ -251,6 +274,24 @@ typedef enum {
     ORM_QUERY_FLAGS_STREAMING = 1 << 0
 } OrmQueryFlags;
 
+/**
+ * OrmJsonLayout:
+ * @ORM_JSON_LAYOUT_ARRAY_OF_OBJECTS: One object per row, keyed by column name
+ * @ORM_JSON_LAYOUT_ARRAY_OF_ARRAYS: One array per row, in column order
+ *
+ * How a JSON export arranges a result set.
+ *
+ * Objects are what an HTTP client or a JavaScript consumer expects, and
+ * survive a column being added or reordered. Arrays repeat the column
+ * names once instead of once per row, which on a wide result is most of
+ * the file -- so they are the choice for bulk data, at the cost of the
+ * reader having to carry the column list alongside.
+ */
+typedef enum {
+    ORM_JSON_LAYOUT_ARRAY_OF_OBJECTS,
+    ORM_JSON_LAYOUT_ARRAY_OF_ARRAYS
+} OrmJsonLayout;
+
 /* GType registration functions */
 GType orm_dialect_type_get_type (void) G_GNUC_CONST;
 GType orm_value_type_get_type (void) G_GNUC_CONST;
@@ -263,7 +304,9 @@ GType orm_foreign_key_action_get_type (void) G_GNUC_CONST;
 GType orm_relationship_type_get_type (void) G_GNUC_CONST;
 GType orm_session_state_get_type (void) G_GNUC_CONST;
 GType orm_isolation_level_get_type (void) G_GNUC_CONST;
+GType orm_connection_state_get_type (void) G_GNUC_CONST;
 GType orm_query_flags_get_type (void) G_GNUC_CONST;
+GType orm_json_layout_get_type (void) G_GNUC_CONST;
 
 #define ORM_TYPE_DIALECT_TYPE (orm_dialect_type_get_type ())
 #define ORM_TYPE_VALUE_TYPE (orm_value_type_get_type ())
@@ -276,7 +319,9 @@ GType orm_query_flags_get_type (void) G_GNUC_CONST;
 #define ORM_TYPE_RELATIONSHIP_TYPE (orm_relationship_type_get_type ())
 #define ORM_TYPE_SESSION_STATE (orm_session_state_get_type ())
 #define ORM_TYPE_ISOLATION_LEVEL (orm_isolation_level_get_type ())
+#define ORM_TYPE_CONNECTION_STATE (orm_connection_state_get_type ())
 #define ORM_TYPE_QUERY_FLAGS (orm_query_flags_get_type ())
+#define ORM_TYPE_JSON_LAYOUT (orm_json_layout_get_type ())
 
 G_END_DECLS
 

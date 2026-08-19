@@ -104,12 +104,18 @@
 
 #include "engine/orm-row.h"
 #include "engine/orm-result.h"
+#include "engine/orm-row-stream.h"
 #include "engine/orm-connection.h"
 #include "engine/orm-transaction.h"
 #include "engine/orm-engine.h"
 
 /* Inspection */
 #include "inspect/orm-inspector.h"
+
+/* Export layer (needs OrmResult and OrmRow) */
+#include "export/orm-exporter.h"
+#include "export/orm-csv-exporter.h"
+#include "export/orm-json-exporter.h"
 
 
 /* ORM layer */

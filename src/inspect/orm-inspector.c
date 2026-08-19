@@ -24,6 +24,7 @@
 #include "../core/orm-error.h"
 #include "../driver/orm-driver.h"
 #include "../engine/orm-engine.h"
+#include "../engine/orm-engine-private.h"
 
 #ifdef ORM_ENABLE_SQLITE
 #include "sqlite/orm-sqlite-inspector.h"
@@ -496,4 +497,638 @@ orm_inspector_estimate_row_count (OrmInspector  *self,
         is_estimate = &local_is_estimate;
 
     return klass->estimate_row_count (self, table, schema, is_estimate, error);
+}
+
+/* ------------------------------------------------------------------ */
+/* Asynchronous introspection                                         */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Every asynchronous inspector operation is the synchronous one run on
+ * the inspected connection's worker thread.  Nothing about reading a
+ * catalog changes off the main thread, and duplicating the per-backend
+ * query sequences to make them asynchronous would be two implementations
+ * of the same thing, one of which would rot.
+ *
+ * Going through the connection's queue rather than a thread of the
+ * inspector's own is what makes this safe: introspection is several
+ * dependent queries on a handle that tolerates one statement at a time.
+ */
+
+typedef struct
+{
+    gchar *table;
+    gchar *schema;
+} OrmInspectJob;
+
+/*
+ * The row count and whether it was estimated travel together, since a
+ * GTask carries one value and the two are meaningless apart.
+ */
+typedef struct
+{
+    gint64   count;
+    gboolean is_estimate;
+} OrmRowCountResult;
+
+static OrmInspectJob *
+orm_inspect_job_new (const gchar *table,
+                     const gchar *schema)
+{
+    OrmInspectJob *job;
+
+    job = g_new0 (OrmInspectJob, 1);
+    job->table = g_strdup (table);
+    job->schema = g_strdup (schema);
+
+    return job;
+}
+
+static void
+orm_inspect_job_free (gpointer data)
+{
+    OrmInspectJob *job = (OrmInspectJob *) data;
+
+    g_free (job->table);
+    g_free (job->schema);
+    g_free (job);
+}
+
+/*
+ * Hands back a string vector, or the error that stopped it.
+ */
+static void
+orm_inspect_return_strv (GTask   *task,
+                         gchar  **strv,
+                         GError  *error)
+{
+    if (!orm_connection_task_may_return (task))
+    {
+        g_strfreev (strv);
+        g_clear_error (&error);
+        return;
+    }
+
+    if (strv == NULL)
+        g_task_return_error (task, g_steal_pointer (&error));
+    else
+        g_task_return_pointer (task, strv, (GDestroyNotify) g_strfreev);
+}
+
+/*
+ * Hands back an array of schema-info objects, or the error.
+ */
+static void
+orm_inspect_return_array (GTask     *task,
+                          GPtrArray *array,
+                          GError    *error)
+{
+    if (!orm_connection_task_may_return (task))
+    {
+        g_clear_pointer (&array, g_ptr_array_unref);
+        g_clear_error (&error);
+        return;
+    }
+
+    if (array == NULL)
+        g_task_return_error (task, g_steal_pointer (&error));
+    else
+        g_task_return_pointer (task, array, (GDestroyNotify) g_ptr_array_unref);
+}
+
+/*
+ * Queues @run on the worker of the connection this inspector reads.
+ */
+static void
+orm_inspector_submit (OrmInspector     *self,
+                      GTask            *task,
+                      OrmWorkerJobFunc  run,
+                      OrmInspectJob    *job)
+{
+    OrmConnection *connection = orm_inspector_get_connection (self);
+
+    if (connection == NULL)
+    {
+        orm_inspect_job_free (job);
+        g_task_return_new_error (task, ORM_ERROR, ORM_ERROR_INVALID_OPERATION,
+                                 "Inspector has no connection");
+        return;
+    }
+
+    orm_connection_submit_async (connection, task, run, job,
+                                 orm_inspect_job_free);
+}
+
+static void
+orm_inspector_list_schemas_job (gpointer  data,
+                                GTask    *task)
+{
+    OrmInspector  *self = ORM_INSPECTOR (g_task_get_source_object (task));
+    GError        *error = NULL;
+    gchar        **schemas;
+
+    if (!orm_connection_task_may_run (task))
+        return;
+
+    schemas = orm_inspector_list_schemas (self, &error);
+    orm_inspect_return_strv (task, schemas, error);
+}
+
+/**
+ * orm_inspector_list_schemas_async:
+ * @self: An #OrmInspector
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async) (nullable): Called when the schemas have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Lists the schemas in the database, on the connection's worker thread.
+ */
+void
+orm_inspector_list_schemas_async (OrmInspector        *self,
+                                  GCancellable        *cancellable,
+                                  GAsyncReadyCallback  callback,
+                                  gpointer             user_data)
+{
+    g_autoptr(GTask) task = NULL;
+
+    g_return_if_fail (ORM_IS_INSPECTOR (self));
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_inspector_list_schemas_async);
+
+    orm_inspector_submit (self, task, orm_inspector_list_schemas_job,
+                          orm_inspect_job_new (NULL, NULL));
+}
+
+/**
+ * orm_inspector_list_schemas_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_list_schemas_async().
+ *
+ * Returns: (transfer full) (array zero-terminated=1) (nullable): The
+ *   schema names, or %NULL on error
+ */
+gchar **
+orm_inspector_list_schemas_finish (OrmInspector  *self,
+                                   GAsyncResult  *result,
+                                   GError       **error)
+{
+    g_return_val_if_fail (ORM_IS_INSPECTOR (self), NULL);
+    g_return_val_if_fail (g_task_is_valid (result, self), NULL);
+
+    return (gchar **) g_task_propagate_pointer (G_TASK (result), error);
+}
+
+static void
+orm_inspector_list_relations_job (gpointer  data,
+                                  GTask    *task)
+{
+    OrmInspector  *self = ORM_INSPECTOR (g_task_get_source_object (task));
+    OrmInspectJob *job = (OrmInspectJob *) data;
+    GError        *error = NULL;
+    GPtrArray     *relations;
+
+    if (!orm_connection_task_may_run (task))
+        return;
+
+    relations = orm_inspector_list_relations (self, job->schema, &error);
+    orm_inspect_return_array (task, relations, error);
+}
+
+/**
+ * orm_inspector_list_relations_async:
+ * @self: An #OrmInspector
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async) (nullable): Called when the relations have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Lists the tables and views in @schema, on the connection's worker thread.
+ */
+void
+orm_inspector_list_relations_async (OrmInspector        *self,
+                                    const gchar         *schema,
+                                    GCancellable        *cancellable,
+                                    GAsyncReadyCallback  callback,
+                                    gpointer             user_data)
+{
+    g_autoptr(GTask) task = NULL;
+
+    g_return_if_fail (ORM_IS_INSPECTOR (self));
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_inspector_list_relations_async);
+
+    orm_inspector_submit (self, task, orm_inspector_list_relations_job,
+                          orm_inspect_job_new (NULL, schema));
+}
+
+/**
+ * orm_inspector_list_relations_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_list_relations_async().
+ *
+ * Returns: (transfer full) (element-type OrmTableInfo) (nullable): The
+ *   relations, or %NULL on error
+ */
+GPtrArray *
+orm_inspector_list_relations_finish (OrmInspector  *self,
+                                     GAsyncResult  *result,
+                                     GError       **error)
+{
+    g_return_val_if_fail (ORM_IS_INSPECTOR (self), NULL);
+    g_return_val_if_fail (g_task_is_valid (result, self), NULL);
+
+    return (GPtrArray *) g_task_propagate_pointer (G_TASK (result), error);
+}
+
+static void
+orm_inspector_get_columns_job (gpointer  data,
+                               GTask    *task)
+{
+    OrmInspector  *self = ORM_INSPECTOR (g_task_get_source_object (task));
+    OrmInspectJob *job = (OrmInspectJob *) data;
+    GError        *error = NULL;
+    GPtrArray     *columns;
+
+    if (!orm_connection_task_may_run (task))
+        return;
+
+    columns = orm_inspector_get_columns (self, job->table, job->schema, &error);
+    orm_inspect_return_array (task, columns, error);
+}
+
+/**
+ * orm_inspector_get_columns_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async) (nullable): Called when the columns have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Gets the columns of @table, on the connection's worker thread.
+ */
+void
+orm_inspector_get_columns_async (OrmInspector        *self,
+                                 const gchar         *table,
+                                 const gchar         *schema,
+                                 GCancellable        *cancellable,
+                                 GAsyncReadyCallback  callback,
+                                 gpointer             user_data)
+{
+    g_autoptr(GTask) task = NULL;
+
+    g_return_if_fail (ORM_IS_INSPECTOR (self));
+    g_return_if_fail (table != NULL);
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_inspector_get_columns_async);
+
+    orm_inspector_submit (self, task, orm_inspector_get_columns_job,
+                          orm_inspect_job_new (table, schema));
+}
+
+/**
+ * orm_inspector_get_columns_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_get_columns_async().
+ *
+ * Returns: (transfer full) (element-type OrmColumnInfo) (nullable): The
+ *   columns, or %NULL on error
+ */
+GPtrArray *
+orm_inspector_get_columns_finish (OrmInspector  *self,
+                                  GAsyncResult  *result,
+                                  GError       **error)
+{
+    g_return_val_if_fail (ORM_IS_INSPECTOR (self), NULL);
+    g_return_val_if_fail (g_task_is_valid (result, self), NULL);
+
+    return (GPtrArray *) g_task_propagate_pointer (G_TASK (result), error);
+}
+
+static void
+orm_inspector_get_indexes_job (gpointer  data,
+                               GTask    *task)
+{
+    OrmInspector  *self = ORM_INSPECTOR (g_task_get_source_object (task));
+    OrmInspectJob *job = (OrmInspectJob *) data;
+    GError        *error = NULL;
+    GPtrArray     *indexes;
+
+    if (!orm_connection_task_may_run (task))
+        return;
+
+    indexes = orm_inspector_get_indexes (self, job->table, job->schema, &error);
+    orm_inspect_return_array (task, indexes, error);
+}
+
+/**
+ * orm_inspector_get_indexes_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async) (nullable): Called when the indexes have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Gets the indexes on @table, on the connection's worker thread.
+ */
+void
+orm_inspector_get_indexes_async (OrmInspector        *self,
+                                 const gchar         *table,
+                                 const gchar         *schema,
+                                 GCancellable        *cancellable,
+                                 GAsyncReadyCallback  callback,
+                                 gpointer             user_data)
+{
+    g_autoptr(GTask) task = NULL;
+
+    g_return_if_fail (ORM_IS_INSPECTOR (self));
+    g_return_if_fail (table != NULL);
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_inspector_get_indexes_async);
+
+    orm_inspector_submit (self, task, orm_inspector_get_indexes_job,
+                          orm_inspect_job_new (table, schema));
+}
+
+/**
+ * orm_inspector_get_indexes_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_get_indexes_async().
+ *
+ * Returns: (transfer full) (element-type OrmIndexInfo) (nullable): The
+ *   indexes, or %NULL on error
+ */
+GPtrArray *
+orm_inspector_get_indexes_finish (OrmInspector  *self,
+                                  GAsyncResult  *result,
+                                  GError       **error)
+{
+    g_return_val_if_fail (ORM_IS_INSPECTOR (self), NULL);
+    g_return_val_if_fail (g_task_is_valid (result, self), NULL);
+
+    return (GPtrArray *) g_task_propagate_pointer (G_TASK (result), error);
+}
+
+static void
+orm_inspector_get_foreign_keys_job (gpointer  data,
+                                    GTask    *task)
+{
+    OrmInspector  *self = ORM_INSPECTOR (g_task_get_source_object (task));
+    OrmInspectJob *job = (OrmInspectJob *) data;
+    GError        *error = NULL;
+    GPtrArray     *foreign_keys;
+
+    if (!orm_connection_task_may_run (task))
+        return;
+
+    foreign_keys = orm_inspector_get_foreign_keys (self, job->table,
+                                                   job->schema, &error);
+    orm_inspect_return_array (task, foreign_keys, error);
+}
+
+/**
+ * orm_inspector_get_foreign_keys_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async) (nullable): Called when the keys have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Gets the foreign keys declared on @table, on the connection's worker
+ * thread.
+ */
+void
+orm_inspector_get_foreign_keys_async (OrmInspector        *self,
+                                      const gchar         *table,
+                                      const gchar         *schema,
+                                      GCancellable        *cancellable,
+                                      GAsyncReadyCallback  callback,
+                                      gpointer             user_data)
+{
+    g_autoptr(GTask) task = NULL;
+
+    g_return_if_fail (ORM_IS_INSPECTOR (self));
+    g_return_if_fail (table != NULL);
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_inspector_get_foreign_keys_async);
+
+    orm_inspector_submit (self, task, orm_inspector_get_foreign_keys_job,
+                          orm_inspect_job_new (table, schema));
+}
+
+/**
+ * orm_inspector_get_foreign_keys_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_get_foreign_keys_async().
+ *
+ * Returns: (transfer full) (element-type OrmForeignKeyInfo) (nullable):
+ *   The foreign keys, or %NULL on error
+ */
+GPtrArray *
+orm_inspector_get_foreign_keys_finish (OrmInspector  *self,
+                                       GAsyncResult  *result,
+                                       GError       **error)
+{
+    g_return_val_if_fail (ORM_IS_INSPECTOR (self), NULL);
+    g_return_val_if_fail (g_task_is_valid (result, self), NULL);
+
+    return (GPtrArray *) g_task_propagate_pointer (G_TASK (result), error);
+}
+
+static void
+orm_inspector_get_primary_key_job (gpointer  data,
+                                   GTask    *task)
+{
+    OrmInspector  *self = ORM_INSPECTOR (g_task_get_source_object (task));
+    OrmInspectJob *job = (OrmInspectJob *) data;
+    GError        *error = NULL;
+    gchar        **columns;
+
+    if (!orm_connection_task_may_run (task))
+        return;
+
+    columns = orm_inspector_get_primary_key (self, job->table, job->schema,
+                                             &error);
+    orm_inspect_return_strv (task, columns, error);
+}
+
+/**
+ * orm_inspector_get_primary_key_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async) (nullable): Called when the key has been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Gets the primary-key columns of @table, on the connection's worker
+ * thread.
+ */
+void
+orm_inspector_get_primary_key_async (OrmInspector        *self,
+                                     const gchar         *table,
+                                     const gchar         *schema,
+                                     GCancellable        *cancellable,
+                                     GAsyncReadyCallback  callback,
+                                     gpointer             user_data)
+{
+    g_autoptr(GTask) task = NULL;
+
+    g_return_if_fail (ORM_IS_INSPECTOR (self));
+    g_return_if_fail (table != NULL);
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_inspector_get_primary_key_async);
+
+    orm_inspector_submit (self, task, orm_inspector_get_primary_key_job,
+                          orm_inspect_job_new (table, schema));
+}
+
+/**
+ * orm_inspector_get_primary_key_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_get_primary_key_async().
+ *
+ * Returns: (transfer full) (array zero-terminated=1) (nullable): The
+ *   column names in key order, or %NULL on error
+ */
+gchar **
+orm_inspector_get_primary_key_finish (OrmInspector  *self,
+                                      GAsyncResult  *result,
+                                      GError       **error)
+{
+    g_return_val_if_fail (ORM_IS_INSPECTOR (self), NULL);
+    g_return_val_if_fail (g_task_is_valid (result, self), NULL);
+
+    return (gchar **) g_task_propagate_pointer (G_TASK (result), error);
+}
+
+static void
+orm_inspector_estimate_row_count_job (gpointer  data,
+                                      GTask    *task)
+{
+    OrmInspector      *self = ORM_INSPECTOR (g_task_get_source_object (task));
+    OrmInspectJob     *job = (OrmInspectJob *) data;
+    OrmRowCountResult *count_result;
+    GError            *error = NULL;
+    gboolean           is_estimate = FALSE;
+    gint64             count;
+
+    if (!orm_connection_task_may_run (task))
+        return;
+
+    count = orm_inspector_estimate_row_count (self, job->table, job->schema,
+                                              &is_estimate, &error);
+
+    if (!orm_connection_task_may_return (task))
+    {
+        g_clear_error (&error);
+        return;
+    }
+
+    if (count < 0)
+    {
+        g_task_return_error (task, g_steal_pointer (&error));
+        return;
+    }
+
+    count_result = g_new0 (OrmRowCountResult, 1);
+    count_result->count = count;
+    count_result->is_estimate = is_estimate;
+
+    g_task_return_pointer (task, count_result, g_free);
+}
+
+/**
+ * orm_inspector_estimate_row_count_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async) (nullable): Called when the count is known
+ * @user_data: (closure): Data for @callback
+ *
+ * Counts the rows in @table, on the connection's worker thread.
+ */
+void
+orm_inspector_estimate_row_count_async (OrmInspector        *self,
+                                        const gchar         *table,
+                                        const gchar         *schema,
+                                        GCancellable        *cancellable,
+                                        GAsyncReadyCallback  callback,
+                                        gpointer             user_data)
+{
+    g_autoptr(GTask) task = NULL;
+
+    g_return_if_fail (ORM_IS_INSPECTOR (self));
+    g_return_if_fail (table != NULL);
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_inspector_estimate_row_count_async);
+
+    orm_inspector_submit (self, task, orm_inspector_estimate_row_count_job,
+                          orm_inspect_job_new (table, schema));
+}
+
+/**
+ * orm_inspector_estimate_row_count_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @is_estimate: (out) (optional): %TRUE if the number is the planner's
+ *   estimate rather than an exact count
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_estimate_row_count_async().
+ *
+ * Returns: The row count, or -1 on error
+ */
+gint64
+orm_inspector_estimate_row_count_finish (OrmInspector  *self,
+                                         GAsyncResult  *result,
+                                         gboolean      *is_estimate,
+                                         GError       **error)
+{
+    OrmRowCountResult *count_result;
+    gint64             count;
+
+    g_return_val_if_fail (ORM_IS_INSPECTOR (self), -1);
+    g_return_val_if_fail (g_task_is_valid (result, self), -1);
+
+    count_result = (OrmRowCountResult *) g_task_propagate_pointer (G_TASK (result),
+                                                                   error);
+    if (count_result == NULL)
+        return -1;
+
+    if (is_estimate != NULL)
+        *is_estimate = count_result->is_estimate;
+
+    count = count_result->count;
+    g_free (count_result);
+
+    return count;
 }

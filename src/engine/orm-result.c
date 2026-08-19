@@ -46,7 +46,14 @@ struct _OrmResult
 {
     GObject parent_instance;
 
-    OrmConnection   *connection;     /* Weak reference */
+    /*
+     * Referenced, because reading a result reaches back into the
+     * connection: SQLite steps a statement that belongs to the database
+     * handle, and every fetch has to happen on the thread that
+     * connection is confined to.  A result outliving its connection
+     * would be stepping a closed database.
+     */
+    OrmConnection   *connection;
     OrmDriverResult *driver_result;
     OrmRow          *current_row;
     GError          *error;
@@ -64,6 +71,7 @@ orm_result_finalize (GObject *object)
     orm_result_close (self);
 
     g_clear_object (&self->current_row);
+    g_clear_object (&self->connection);
     g_clear_error (&self->error);
 
     G_OBJECT_CLASS (orm_result_parent_class)->finalize (object);
@@ -104,10 +112,28 @@ orm_result_new_for_driver (OrmConnection   *connection,
     g_return_val_if_fail (ORM_IS_DRIVER_RESULT (driver_result), NULL);
 
     self = g_object_new (ORM_TYPE_RESULT, NULL);
-    self->connection = connection;  /* Weak reference */
+    self->connection = g_object_ref (connection);
     self->driver_result = driver_result;
 
     return self;
+}
+
+/*
+ * One step of the cursor, run on the connection's thread.
+ */
+typedef struct
+{
+    OrmResult *result;
+    OrmRow    *row;
+} OrmResultFetchWork;
+
+static void
+orm_result_fetch_work (gpointer data)
+{
+    OrmResultFetchWork *work = (OrmResultFetchWork *) data;
+    OrmResult          *self = work->result;
+
+    work->row = orm_driver_result_fetch_row (self->driver_result, &self->error);
 }
 
 /**
@@ -124,7 +150,8 @@ orm_result_new_for_driver (OrmConnection   *connection,
 gboolean
 orm_result_next (OrmResult *self)
 {
-    OrmRow *row;
+    OrmResultFetchWork  work;
+    OrmRow             *row;
 
     g_return_val_if_fail (ORM_IS_RESULT (self), FALSE);
     g_return_val_if_fail (!self->is_closed, FALSE);
@@ -134,7 +161,18 @@ orm_result_next (OrmResult *self)
     if (self->exhausted || self->driver_result == NULL)
         return FALSE;
 
-    row = orm_driver_result_fetch_row (self->driver_result, &self->error);
+    /*
+     * Stepping goes through the connection, so a result being read here
+     * cannot collide with a statement the connection's worker is running
+     * for someone else.  With no worker this is a direct call, exactly
+     * as it always was.
+     */
+    work.result = self;
+    work.row = NULL;
+
+    orm_connection_run_confined (self->connection, orm_result_fetch_work, &work);
+
+    row = work.row;
 
     if (row == NULL)
     {
@@ -338,16 +376,33 @@ orm_result_get_scalar (OrmResult *self)
  *
  * Releases the cursor.  Safe to call more than once.
  */
-void
-orm_result_close (OrmResult *self)
+static void
+orm_result_close_work (gpointer data)
 {
-    g_return_if_fail (ORM_IS_RESULT (self));
+    OrmResult *self = ORM_RESULT (data);
 
     if (self->driver_result != NULL)
     {
         orm_driver_result_close (self->driver_result);
         g_clear_object (&self->driver_result);
     }
+}
+
+void
+orm_result_close (OrmResult *self)
+{
+    g_return_if_fail (ORM_IS_RESULT (self));
+
+    /*
+     * Releasing the cursor is backend work like any other -- finalizing
+     * a SQLite statement on one thread while the worker steps another on
+     * the same database is precisely what the confinement rule exists to
+     * prevent.
+     */
+    if (self->connection != NULL)
+        orm_connection_run_confined (self->connection, orm_result_close_work, self);
+    else
+        orm_result_close_work (self);
 
     self->is_closed = TRUE;
     self->exhausted = TRUE;

@@ -370,6 +370,50 @@ G_DEFINE_FINAL_TYPE (OrmPostgresDriverConnection, orm_postgres_driver_connection
                      ORM_TYPE_DRIVER_CONNECTION)
 
 /*
+ * PostgreSQL sends messages that belong to no result: NOTICE, WARNING,
+ * whatever a function RAISEs, the "skipping" from a DROP ... IF EXISTS.
+ * libpq's default receiver prints them to stderr, which is nobody's idea
+ * of a user interface.
+ *
+ * They are surfaced as a signal on this type rather than through a
+ * method on OrmDriverConnection because no other backend has the notion:
+ * SQLite has no such channel at all, and MySQL keeps its warnings until
+ * SHOW WARNINGS asks for them.  OrmConnection looks the signal up by
+ * name, so a backend that grows one later needs no change there either.
+ */
+enum {
+    SIGNAL_NOTICE,
+    N_SIGNALS
+};
+
+static guint pg_signals[N_SIGNALS];
+
+/*
+ * libpq calls this from inside whichever thread is running the
+ * statement, and clears @result itself once this returns -- so the
+ * message is copied out and nothing here touches the PGresult
+ * afterwards.
+ */
+static void
+orm_postgres_notice_receiver (void             *arg,
+                              const PGresult   *result)
+{
+    OrmPostgresDriverConnection *self = (OrmPostgresDriverConnection *) arg;
+    const gchar                 *message;
+    g_autofree gchar            *trimmed = NULL;
+
+    message = PQresultErrorMessage (result);
+    if (message == NULL || *message == '\0')
+        return;
+
+    /* libpq terminates these with a newline; a signal argument should not. */
+    trimmed = g_strdup (message);
+    g_strchomp (trimmed);
+
+    g_signal_emit (self, pg_signals[SIGNAL_NOTICE], 0, trimmed);
+}
+
+/*
  * Renders one OrmValue as the text PostgreSQL parses parameters from.
  *
  * Returns: (transfer full) (nullable): The text, or %NULL for a SQL NULL
@@ -747,6 +791,22 @@ orm_postgres_driver_connection_class_init (OrmPostgresDriverConnectionClass *kla
     conn_class->get_changes = orm_postgres_driver_connection_get_changes;
     conn_class->set_isolation_level = orm_postgres_driver_connection_set_isolation_level;
     conn_class->interrupt = orm_postgres_driver_connection_interrupt;
+
+    /*
+     * OrmPostgresDriverConnection::notice:
+     * @self: The connection
+     * @message: The server's message, with no trailing newline
+     *
+     * Emitted on the thread the statement is running on.  OrmConnection
+     * marshals it into the owning main context before passing it on.
+     */
+    pg_signals[SIGNAL_NOTICE] =
+        g_signal_new ("notice",
+                      G_TYPE_FROM_CLASS (klass),
+                      G_SIGNAL_RUN_LAST,
+                      0, NULL, NULL, NULL,
+                      G_TYPE_NONE, 1,
+                      G_TYPE_STRING);
 }
 
 static void
@@ -896,6 +956,13 @@ orm_postgres_driver_open (OrmDriver  *driver,
      * query is in flight is the race that interrupt() exists to avoid.
      */
     self->cancel = PQgetCancel (conn);
+
+    /*
+     * Replaces libpq's default receiver, which writes to stderr.  Set
+     * before the connection is handed out so no notice can arrive
+     * unclaimed.
+     */
+    PQsetNoticeReceiver (conn, orm_postgres_notice_receiver, self);
 
     return ORM_DRIVER_CONNECTION (self);
 }

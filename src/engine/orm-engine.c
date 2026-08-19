@@ -22,6 +22,7 @@
 
 #include "orm-engine.h"
 #include "orm-connection.h"
+#include "orm-engine-private.h"
 #include "../core/orm-error.h"
 #include "../schema/orm-metadata.h"
 #include "../dialect/orm-ddl-compiler.h"
@@ -567,6 +568,105 @@ orm_engine_connect (OrmEngine  *self,
     g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
     return orm_connection_new (self, error);
+}
+
+/*
+ * Opens the connection on a thread GIO supplies.
+ *
+ * There is no worker to run this on yet -- a connection's worker belongs
+ * to a connection that exists -- so this is the one place in the library
+ * that uses the GIO thread pool.  It is a one-shot, so nothing is
+ * serialized against anything.
+ */
+static void
+orm_engine_connect_thread (GTask        *task,
+                           gpointer      source_object,
+                           gpointer      task_data,
+                           GCancellable *cancellable)
+{
+    OrmEngine     *self = ORM_ENGINE (source_object);
+    GMainContext  *owner_context = (GMainContext *) task_data;
+    OrmConnection *connection;
+    GError        *error = NULL;
+
+    if (g_task_return_error_if_cancelled (task))
+        return;
+
+    connection = orm_connection_new (self, &error);
+
+    if (connection == NULL)
+    {
+        g_task_return_error (task, g_steal_pointer (&error));
+        return;
+    }
+
+    /*
+     * The connection captured this thread's context when it was built,
+     * which is not where the caller is listening.
+     */
+    orm_connection_set_owner_context (connection, owner_context);
+
+    /*
+     * A connection that arrives after the caller gave up is closed here
+     * rather than handed over: the caller has no way to learn it exists,
+     * so nobody else would ever close it.
+     */
+    if (g_task_return_error_if_cancelled (task))
+    {
+        orm_connection_close (connection);
+        g_object_unref (connection);
+        return;
+    }
+
+    g_task_return_pointer (task, connection, g_object_unref);
+}
+
+/**
+ * orm_engine_connect_async:
+ * @self: An #OrmEngine
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async) (nullable): Called when the connection is open
+ * @user_data: (closure): Data for @callback
+ *
+ * Opens a connection without blocking the calling thread.
+ */
+void
+orm_engine_connect_async (OrmEngine           *self,
+                          GCancellable        *cancellable,
+                          GAsyncReadyCallback  callback,
+                          gpointer             user_data)
+{
+    g_autoptr(GTask) task = NULL;
+
+    g_return_if_fail (ORM_IS_ENGINE (self));
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_engine_connect_async);
+    g_task_set_task_data (task, g_main_context_ref_thread_default (),
+                          (GDestroyNotify) g_main_context_unref);
+
+    g_task_run_in_thread (task, orm_engine_connect_thread);
+}
+
+/**
+ * orm_engine_connect_finish:
+ * @self: An #OrmEngine
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_engine_connect_async().
+ *
+ * Returns: (transfer full) (nullable): A new #OrmConnection, or %NULL on error
+ */
+OrmConnection *
+orm_engine_connect_finish (OrmEngine     *self,
+                           GAsyncResult  *result,
+                           GError       **error)
+{
+    g_return_val_if_fail (ORM_IS_ENGINE (self), NULL);
+    g_return_val_if_fail (g_task_is_valid (result, self), NULL);
+
+    return (OrmConnection *) g_task_propagate_pointer (G_TASK (result), error);
 }
 
 /**

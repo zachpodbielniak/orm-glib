@@ -10,6 +10,8 @@ orm-glib is a GObject/GLib ORM library for C, inspired by SQLAlchemy. It provide
 - **Query Builder**: Fluent API for building type-safe queries
 - **Session Management**: Unit of Work pattern with identity map
 - **Schema Generation**: Generate DDL from GObject definitions
+- **Export**: Write result sets out as CSV or JSON
+- **Async**: `GTask`-based queries with `GCancellable`, incremental row streaming, and connection state signals
 - **GObject Introspection**: Full GIR support for language bindings
 
 ## Quick Example
@@ -41,6 +43,8 @@ GList *users = orm_query_all (query, &error);
 - [Architecture](architecture.md) - Library design and components
 - [Dialects](dialects.md) - Database-specific SQL and type mapping
 - [Drivers](drivers.md) - Backend I/O, the scheme registry, and adding a database
+- [Export](export.md) - Writing a result set out as CSV or JSON
+- [Async](async.md) - Running queries off the calling thread, cancelling them, and connection signals
 - [OrmSerializable](serializable.md) - Making GObjects persistable
 
 ## Building

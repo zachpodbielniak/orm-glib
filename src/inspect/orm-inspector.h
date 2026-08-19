@@ -28,6 +28,7 @@
 #endif
 
 #include <glib-object.h>
+#include <gio/gio.h>
 #include "../engine/orm-connection.h"
 #include "orm-schema-info.h"
 
@@ -272,6 +273,245 @@ gint64 orm_inspector_estimate_row_count (OrmInspector  *self,
                                          const gchar   *schema,
                                          gboolean      *is_estimate,
                                          GError       **error);
+
+/*
+ * Asynchronous introspection.
+ *
+ * Reading a catalog is several queries whose results feed each other, so
+ * it is the slowest read the library does on a large schema -- and it is
+ * exactly what a database browser wants to do the moment it connects,
+ * while still drawing.  Each of these runs the whole sequence on the
+ * connection's worker thread, in turn with everything else queued there.
+ */
+
+/*
+ * orm_inspector_list_schemas_async:
+ * @self: An #OrmInspector
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the schemas have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Lists the schemas in the database, without blocking.
+ */
+void orm_inspector_list_schemas_async (OrmInspector        *self,
+                                       GCancellable        *cancellable,
+                                       GAsyncReadyCallback  callback,
+                                       gpointer             user_data);
+
+/*
+ * orm_inspector_list_schemas_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_list_schemas_async().
+ *
+ * Returns: (transfer full) (array zero-terminated=1) (nullable): The
+ *   schema names, or %NULL on error
+ */
+gchar ** orm_inspector_list_schemas_finish (OrmInspector  *self,
+                                            GAsyncResult  *result,
+                                            GError       **error);
+
+/*
+ * orm_inspector_list_relations_async:
+ * @self: An #OrmInspector
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the relations have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Lists the tables and views in @schema, without blocking.
+ */
+void orm_inspector_list_relations_async (OrmInspector        *self,
+                                         const gchar         *schema,
+                                         GCancellable        *cancellable,
+                                         GAsyncReadyCallback  callback,
+                                         gpointer             user_data);
+
+/*
+ * orm_inspector_list_relations_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_list_relations_async().
+ *
+ * Returns: (transfer full) (element-type OrmTableInfo) (nullable): The
+ *   relations, or %NULL on error
+ */
+GPtrArray * orm_inspector_list_relations_finish (OrmInspector  *self,
+                                                 GAsyncResult  *result,
+                                                 GError       **error);
+
+/*
+ * orm_inspector_get_columns_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the columns have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Gets the columns of @table, without blocking.
+ */
+void orm_inspector_get_columns_async (OrmInspector        *self,
+                                      const gchar         *table,
+                                      const gchar         *schema,
+                                      GCancellable        *cancellable,
+                                      GAsyncReadyCallback  callback,
+                                      gpointer             user_data);
+
+/*
+ * orm_inspector_get_columns_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_get_columns_async().
+ *
+ * Returns: (transfer full) (element-type OrmColumnInfo) (nullable): The
+ *   columns, or %NULL on error
+ */
+GPtrArray * orm_inspector_get_columns_finish (OrmInspector  *self,
+                                              GAsyncResult  *result,
+                                              GError       **error);
+
+/*
+ * orm_inspector_get_indexes_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the indexes have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Gets the indexes on @table, without blocking.
+ */
+void orm_inspector_get_indexes_async (OrmInspector        *self,
+                                      const gchar         *table,
+                                      const gchar         *schema,
+                                      GCancellable        *cancellable,
+                                      GAsyncReadyCallback  callback,
+                                      gpointer             user_data);
+
+/*
+ * orm_inspector_get_indexes_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_get_indexes_async().
+ *
+ * Returns: (transfer full) (element-type OrmIndexInfo) (nullable): The
+ *   indexes, or %NULL on error
+ */
+GPtrArray * orm_inspector_get_indexes_finish (OrmInspector  *self,
+                                              GAsyncResult  *result,
+                                              GError       **error);
+
+/*
+ * orm_inspector_get_foreign_keys_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the foreign keys have been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Gets the foreign keys declared on @table, without blocking.
+ */
+void orm_inspector_get_foreign_keys_async (OrmInspector        *self,
+                                           const gchar         *table,
+                                           const gchar         *schema,
+                                           GCancellable        *cancellable,
+                                           GAsyncReadyCallback  callback,
+                                           gpointer             user_data);
+
+/*
+ * orm_inspector_get_foreign_keys_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_get_foreign_keys_async().
+ *
+ * Returns: (transfer full) (element-type OrmForeignKeyInfo) (nullable):
+ *   The foreign keys, or %NULL on error
+ */
+GPtrArray * orm_inspector_get_foreign_keys_finish (OrmInspector  *self,
+                                                   GAsyncResult  *result,
+                                                   GError       **error);
+
+/*
+ * orm_inspector_get_primary_key_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the key has been read
+ * @user_data: (closure): Data for @callback
+ *
+ * Gets the primary-key columns of @table, without blocking.
+ */
+void orm_inspector_get_primary_key_async (OrmInspector        *self,
+                                          const gchar         *table,
+                                          const gchar         *schema,
+                                          GCancellable        *cancellable,
+                                          GAsyncReadyCallback  callback,
+                                          gpointer             user_data);
+
+/*
+ * orm_inspector_get_primary_key_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_get_primary_key_async().
+ *
+ * Returns: (transfer full) (array zero-terminated=1) (nullable): The
+ *   column names in key order, or %NULL on error
+ */
+gchar ** orm_inspector_get_primary_key_finish (OrmInspector  *self,
+                                               GAsyncResult  *result,
+                                               GError       **error);
+
+/*
+ * orm_inspector_estimate_row_count_async:
+ * @self: An #OrmInspector
+ * @table: The relation name
+ * @schema: (nullable): The schema, or %NULL for the default
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the count is known
+ * @user_data: (closure): Data for @callback
+ *
+ * Counts the rows in @table, without blocking.  This is the one worth
+ * having asynchronous even on SQLite, where the count is always exact
+ * and therefore always a full scan.
+ */
+void orm_inspector_estimate_row_count_async (OrmInspector        *self,
+                                             const gchar         *table,
+                                             const gchar         *schema,
+                                             GCancellable        *cancellable,
+                                             GAsyncReadyCallback  callback,
+                                             gpointer             user_data);
+
+/*
+ * orm_inspector_estimate_row_count_finish:
+ * @self: An #OrmInspector
+ * @result: The #GAsyncResult
+ * @is_estimate: (out) (optional): %TRUE if the number is the planner's
+ *   estimate rather than an exact count
+ * @error: Return location for error
+ *
+ * Finishes orm_inspector_estimate_row_count_async().
+ *
+ * Returns: The row count, or -1 on error
+ */
+gint64 orm_inspector_estimate_row_count_finish (OrmInspector  *self,
+                                                GAsyncResult  *result,
+                                                gboolean      *is_estimate,
+                                                GError       **error);
 
 G_END_DECLS
 

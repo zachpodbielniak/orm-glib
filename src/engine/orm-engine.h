@@ -28,6 +28,7 @@
 #endif
 
 #include <glib-object.h>
+#include <gio/gio.h>
 #include "../core/orm-enums.h"
 #include "../driver/orm-driver.h"
 #include "../dialect/orm-dialect.h"
@@ -132,6 +133,44 @@ const gchar * orm_engine_get_url (OrmEngine *self);
  */
 OrmConnection * orm_engine_connect (OrmEngine  *self,
                                     GError    **error);
+
+/*
+ * orm_engine_connect_async:
+ * @self: An #OrmEngine
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the connection is open
+ * @user_data: (closure): Data for @callback
+ *
+ * Opens a connection without blocking.
+ *
+ * Worth having on its own because opening is the slowest thing the
+ * library does over a network: a PostgreSQL or MySQL handshake means a
+ * TCP connection, possibly a TLS negotiation, and authentication, none
+ * of which a user interface should sit still for.
+ *
+ * The connection is built on a thread of GIO's choosing but adopts the
+ * calling thread's #GMainContext as its own, so its signals arrive where
+ * the caller expects them.  Cancelling gives up waiting; a connection
+ * that finishes opening afterwards is closed rather than leaked.
+ */
+void orm_engine_connect_async (OrmEngine           *self,
+                               GCancellable        *cancellable,
+                               GAsyncReadyCallback  callback,
+                               gpointer             user_data);
+
+/*
+ * orm_engine_connect_finish:
+ * @self: An #OrmEngine
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_engine_connect_async().
+ *
+ * Returns: (transfer full) (nullable): A new #OrmConnection, or %NULL on error
+ */
+OrmConnection * orm_engine_connect_finish (OrmEngine     *self,
+                                           GAsyncResult  *result,
+                                           GError       **error);
 
 /*
  * orm_engine_execute:

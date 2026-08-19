@@ -333,6 +333,33 @@ orm_isolation_level_get_type (void)
 }
 
 /*
+ * GType registration for OrmConnectionState enumeration.
+ * The states an OrmConnection reports through its "state-changed" signal.
+ */
+GType
+orm_connection_state_get_type (void)
+{
+    static volatile gsize g_define_type_id__volatile = 0;
+
+    if (g_once_init_enter (&g_define_type_id__volatile))
+    {
+        static const GEnumValue values[] = {
+            { ORM_CONNECTION_CLOSED, "ORM_CONNECTION_CLOSED", "closed" },
+            { ORM_CONNECTION_CONNECTING, "ORM_CONNECTION_CONNECTING", "connecting" },
+            { ORM_CONNECTION_IDLE, "ORM_CONNECTION_IDLE", "idle" },
+            { ORM_CONNECTION_BUSY, "ORM_CONNECTION_BUSY", "busy" },
+            { 0, NULL, NULL }
+        };
+        GType g_define_type_id;
+
+        g_define_type_id = g_enum_register_static ("OrmConnectionState", values);
+        g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+    }
+
+    return g_define_type_id__volatile;
+}
+
+/*
  * GType registration for OrmQueryFlags.  A bitmask, hence flags rather
  * than enum registration.
  */
@@ -351,6 +378,31 @@ orm_query_flags_get_type (void)
         GType g_define_type_id;
 
         g_define_type_id = g_flags_register_static ("OrmQueryFlags", values);
+        g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+    }
+
+    return g_define_type_id__volatile;
+}
+
+/*
+ * GType registration for OrmJsonLayout enumeration.
+ * Selects the shape a JSON export gives a result set.
+ */
+GType
+orm_json_layout_get_type (void)
+{
+    static volatile gsize g_define_type_id__volatile = 0;
+
+    if (g_once_init_enter (&g_define_type_id__volatile))
+    {
+        static const GEnumValue values[] = {
+            { ORM_JSON_LAYOUT_ARRAY_OF_OBJECTS, "ORM_JSON_LAYOUT_ARRAY_OF_OBJECTS", "array-of-objects" },
+            { ORM_JSON_LAYOUT_ARRAY_OF_ARRAYS, "ORM_JSON_LAYOUT_ARRAY_OF_ARRAYS", "array-of-arrays" },
+            { 0, NULL, NULL }
+        };
+        GType g_define_type_id;
+
+        g_define_type_id = g_enum_register_static ("OrmJsonLayout", values);
         g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
     }
 

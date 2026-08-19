@@ -103,7 +103,8 @@ src/
 ├── engine/         # Database connections (OrmEngine, OrmConnection)
 ├── dialect/        # Database-specific implementations
 ├── sql/            # SQL expression language
-└── orm/            # ORM layer (OrmSession, OrmMapper)
+├── orm/            # ORM layer (OrmSession, OrmMapper)
+└── export/         # Result sets out as text (OrmExporter: CSV, JSON)
 ```
 
 ## Implementation Status
@@ -142,6 +143,14 @@ src/
 - [x] Documentation
 - [x] Examples
 
+### Phase 8 (Complete)
+- [x] Async layer: `GTask` API on engine, connection and inspector
+- [x] One serialized worker thread per connection, shared with the
+      synchronous API so the two cannot race
+- [x] `GCancellable` wired to the driver `interrupt` vfunc
+- [x] `OrmRowStream` for incremental row delivery
+- [x] `OrmConnection` "state-changed" and "notice" signals
+
 ### Not implemented yet
 
 These are the gaps a caller notices, listed so nobody goes looking for an
@@ -153,14 +162,20 @@ API that is not there:
   There is no API to list tables, columns, indexes or foreign keys.
 - **Result column types.** `OrmResult` exposes column names and count only;
   there is no declared-type metadata.
-- **Async.** Everything blocks. No `GTask`, no `GCancellable`, and the
-  library is not thread-safe: a connection belongs to one thread.
-- **Signals.** No type in the library emits any.
+- **Server-side streaming on PostgreSQL and MySQL.**
+  `ORM_QUERY_FLAGS_STREAMING` and `OrmRowStream` work on all three
+  backends, but only SQLite genuinely streams; `PQsetSingleRowMode` and
+  `mysql_use_result` are not wired up, so on those two the whole result
+  is still materialized before the first batch.
 - **Connection pooling.** Every `orm_engine_connect()` opens a new
   connection, and `orm_engine_execute()` opens and closes one per call.
+  One connection means one worker thread, so parallelism means opening
+  more connections yourself -- see `docs/async.md`.
 - **Migrations.** No versioning and no `ALTER TABLE` in the DDL compiler.
-- **Text serialization.** `OrmSerializable` means object-to-row, not
-  object-to-JSON. There is no CSV or JSON output.
+- **Text serialization of objects.** `OrmSerializable` means
+  object-to-row, not object-to-JSON. Result sets *can* be written out --
+  see `src/export/` and `docs/export.md` for the `OrmExporter` family
+  (CSV, JSON) -- but there is no mapped-object-to-text path.
 
 ## Build matrix
 

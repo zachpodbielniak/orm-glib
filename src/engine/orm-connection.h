@@ -28,6 +28,7 @@
 #endif
 
 #include <glib-object.h>
+#include <gio/gio.h>
 #include "../core/orm-enums.h"
 #include "../core/orm-value.h"
 
@@ -40,6 +41,7 @@ G_DECLARE_FINAL_TYPE (OrmConnection, orm_connection, ORM, CONNECTION, GObject)
 /* Forward declarations */
 typedef struct _OrmEngine OrmEngine;
 typedef struct _OrmResult OrmResult;
+typedef struct _OrmRowStream OrmRowStream;
 typedef struct _OrmTransaction OrmTransaction;
 
 /*
@@ -50,6 +52,27 @@ typedef struct _OrmTransaction OrmTransaction;
  *
  * Connections should be obtained from an OrmEngine and closed
  * when no longer needed.
+ *
+ * # Threading
+ *
+ * A connection belongs to whichever thread created it, and none of the
+ * backends allow two statements at once on one handle.  The
+ * asynchronous API does not change that -- it moves the work onto a
+ * single worker thread the connection owns, so operations still run one
+ * at a time and still in the order they were started.
+ *
+ * That worker appears on the first _async call and lives until the
+ * connection is closed.  Once it exists, the synchronous calls run on it
+ * too, waiting their turn behind whatever is queued rather than reaching
+ * into the backend from the caller's thread.  Mixing the two is
+ * therefore safe; a synchronous call simply blocks for as long as the
+ * queue ahead of it takes.
+ *
+ * # Signals
+ *
+ * "state-changed" and "notice" are always emitted in the thread-default
+ * #GMainContext of the thread that created the connection, never on the
+ * worker, so a handler may touch a user interface directly.
  */
 
 /*
@@ -233,6 +256,176 @@ gint orm_connection_get_changes (OrmConnection *self);
  * Returns: (transfer none): The engine
  */
 OrmEngine * orm_connection_get_engine (OrmConnection *self);
+
+/*
+ * orm_connection_get_state:
+ * @self: An #OrmConnection
+ *
+ * Gets the connection's current state, the same value its
+ * "state-changed" signal last reported.
+ *
+ * Returns: The current #OrmConnectionState
+ */
+OrmConnectionState orm_connection_get_state (OrmConnection *self);
+
+/*
+ * Asynchronous API.
+ *
+ * Cancelling is best-effort and backend-dependent, because "stop what
+ * you are doing" is not something every client library offers:
+ *
+ * - SQLite and PostgreSQL can be interrupted, so the statement really
+ *   does stop early and the connection is usable immediately after.
+ * - MySQL cannot: its client library has no interrupt that is safe to
+ *   call from another thread while a query is running.  The task still
+ *   fails with %G_IO_ERROR_CANCELLED straight away, but the statement
+ *   runs to completion in the background and its result is discarded, so
+ *   the connection stays busy until the server is finished with it.
+ *
+ * Either way the connection remains open and usable after a cancelled
+ * operation.
+ */
+
+/*
+ * orm_connection_close_async:
+ * @self: An #OrmConnection
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the connection is closed
+ * @user_data: (closure): Data for @callback
+ *
+ * Closes the connection once everything already queued on it has run.
+ */
+void orm_connection_close_async (OrmConnection       *self,
+                                 GCancellable        *cancellable,
+                                 GAsyncReadyCallback  callback,
+                                 gpointer             user_data);
+
+/*
+ * orm_connection_close_finish:
+ * @self: An #OrmConnection
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_connection_close_async().
+ *
+ * Returns: %TRUE on success
+ */
+gboolean orm_connection_close_finish (OrmConnection  *self,
+                                      GAsyncResult   *result,
+                                      GError        **error);
+
+/*
+ * orm_connection_execute_async:
+ * @self: An #OrmConnection
+ * @sql: SQL statement with placeholders
+ * @params: (element-type OrmValue) (nullable) (transfer none): Parameter
+ *   values, copied before the call returns
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the statement has run
+ * @user_data: (closure): Data for @callback
+ *
+ * Executes a statement that returns no rows.
+ */
+void orm_connection_execute_async (OrmConnection       *self,
+                                   const gchar         *sql,
+                                   GList               *params,
+                                   GCancellable        *cancellable,
+                                   GAsyncReadyCallback  callback,
+                                   gpointer             user_data);
+
+/*
+ * orm_connection_execute_finish:
+ * @self: An #OrmConnection
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_connection_execute_async().
+ *
+ * Returns: %TRUE on success
+ */
+gboolean orm_connection_execute_finish (OrmConnection  *self,
+                                        GAsyncResult   *result,
+                                        GError        **error);
+
+/*
+ * orm_connection_query_async:
+ * @self: An #OrmConnection
+ * @sql: SQL query with placeholders
+ * @params: (element-type OrmValue) (nullable) (transfer none): Parameter
+ *   values, copied before the call returns
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the result set is ready
+ * @user_data: (closure): Data for @callback
+ *
+ * Runs a query and hands back an #OrmResult.
+ *
+ * What has happened by the time the callback runs is up to the backend:
+ * PostgreSQL and MySQL have every row in memory, while SQLite has only
+ * prepared the statement and steps it as the result is read.  Reading an
+ * #OrmResult is synchronous either way, so on SQLite the row-by-row work
+ * still blocks whoever calls orm_result_next().  Use
+ * orm_connection_query_stream_async() to keep that off the calling
+ * thread as well.
+ */
+void orm_connection_query_async (OrmConnection       *self,
+                                 const gchar         *sql,
+                                 GList               *params,
+                                 GCancellable        *cancellable,
+                                 GAsyncReadyCallback  callback,
+                                 gpointer             user_data);
+
+/*
+ * orm_connection_query_finish:
+ * @self: An #OrmConnection
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_connection_query_async().
+ *
+ * Returns: (transfer full) (nullable): The result set, or %NULL on error
+ */
+OrmResult * orm_connection_query_finish (OrmConnection  *self,
+                                         GAsyncResult   *result,
+                                         GError        **error);
+
+/*
+ * orm_connection_query_stream_async:
+ * @self: An #OrmConnection
+ * @sql: SQL query with placeholders
+ * @params: (element-type OrmValue) (nullable) (transfer none): Parameter
+ *   values, copied before the call returns
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the stream is ready
+ * @user_data: (closure): Data for @callback
+ *
+ * Runs a query and hands back an #OrmRowStream, which fetches rows a
+ * batch at a time on the connection's worker thread.
+ *
+ * The query is issued with %ORM_QUERY_FLAGS_STREAMING.  Only SQLite acts
+ * on that today -- PostgreSQL and MySQL still materialize the result
+ * before the stream is created -- so on those two the stream is a way to
+ * read rows without blocking, not a way to avoid holding them in memory.
+ */
+void orm_connection_query_stream_async (OrmConnection       *self,
+                                        const gchar         *sql,
+                                        GList               *params,
+                                        GCancellable        *cancellable,
+                                        GAsyncReadyCallback  callback,
+                                        gpointer             user_data);
+
+/*
+ * orm_connection_query_stream_finish:
+ * @self: An #OrmConnection
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_connection_query_stream_async().
+ *
+ * Returns: (transfer full) (nullable): The row stream, or %NULL on error
+ */
+OrmRowStream * orm_connection_query_stream_finish (OrmConnection  *self,
+                                                   GAsyncResult   *result,
+                                                   GError        **error);
 
 G_END_DECLS
 

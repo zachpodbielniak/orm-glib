@@ -24,8 +24,11 @@
 #define ORM_ENGINE_PRIVATE_H
 
 #include <glib-object.h>
+#include <gio/gio.h>
 #include "orm-connection.h"
 #include "orm-result.h"
+#include "orm-row-stream.h"
+#include "orm-worker.h"
 #include "../driver/orm-driver-connection.h"
 #include "../driver/orm-driver-result.h"
 
@@ -41,6 +44,39 @@ G_BEGIN_DECLS
 G_GNUC_INTERNAL
 OrmResult * orm_result_new_for_driver (OrmConnection   *connection,
                                        OrmDriverResult *driver_result);
+
+G_GNUC_INTERNAL
+OrmRowStream * orm_row_stream_new_for_driver (OrmConnection   *connection,
+                                              OrmDriverResult *driver_result);
+
+/*
+ * The asynchronous plumbing, used by the inspector and the row stream so
+ * their work lands on the same worker thread as the connection's own.
+ * Going through here rather than pushing to the worker directly is what
+ * keeps the state signal and the cancellation wiring in one place.
+ */
+
+G_GNUC_INTERNAL
+void orm_connection_submit_async (OrmConnection    *self,
+                                  GTask            *task,
+                                  OrmWorkerJobFunc  run,
+                                  gpointer          data,
+                                  GDestroyNotify    data_free);
+
+G_GNUC_INTERNAL
+gboolean orm_connection_task_may_run (GTask *task);
+
+G_GNUC_INTERNAL
+gboolean orm_connection_task_may_return (GTask *task);
+
+G_GNUC_INTERNAL
+void orm_connection_run_confined (OrmConnection     *self,
+                                  OrmWorkerSyncFunc  func,
+                                  gpointer           data);
+
+G_GNUC_INTERNAL
+void orm_connection_set_owner_context (OrmConnection *self,
+                                       GMainContext  *context);
 
 G_GNUC_INTERNAL
 void orm_connection_set_in_transaction (OrmConnection *self,
