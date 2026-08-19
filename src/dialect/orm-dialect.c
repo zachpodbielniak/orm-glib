@@ -21,12 +21,22 @@
  */
 
 #include "orm-dialect.h"
+
+/*
+ * One guarded block per backend.  These must stay siblings: nesting the
+ * PostgreSQL include inside the SQLite guard made an ENABLE_SQLITE=0
+ * ENABLE_POSTGRES=1 build drop the declaration and fail under -Werror.
+ */
 #ifdef ORM_ENABLE_SQLITE
 #include "sqlite/orm-sqlite-dialect.h"
+#endif
 
 #ifdef ORM_ENABLE_POSTGRES
 #include "postgres/orm-postgres-dialect.h"
 #endif
+
+#ifdef ORM_ENABLE_MYSQL
+#include "mysql/orm-mysql-dialect.h"
 #endif
 
 /*
@@ -456,8 +466,7 @@ orm_dialect_for_type (OrmDialectType type)
 
     case ORM_DIALECT_MYSQL:
 #ifdef ORM_ENABLE_MYSQL
-        /* Will be implemented when MySQL dialect is created */
-        return NULL;
+        return ORM_DIALECT (orm_mysql_dialect_new ());
 #else
         g_warning ("MySQL dialect not enabled at compile time");
         return NULL;

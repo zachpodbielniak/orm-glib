@@ -190,6 +190,7 @@ TEST_SRCS := \
 	tests/test-types.c \
 	tests/test-schema.c \
 	tests/test-engine.c \
+	tests/test-dialect-factory.c \
 	tests/test-dialect-sqlite.c \
 	tests/test-expression.c \
 	tests/test-select.c \

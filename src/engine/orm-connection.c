@@ -387,6 +387,8 @@ orm_connection_init (OrmConnection *self)
  * Returns: (transfer full) (nullable): A new #OrmConnection, or %NULL on error
  */
 
+#ifdef ORM_ENABLE_POSTGRES
+
 /*
  * Quotes a value for a libpq keyword/value connection string.
  *
@@ -417,6 +419,8 @@ orm_conninfo_quote (const gchar *value)
 
     return g_string_free (quoted, FALSE);
 }
+
+#endif /* ORM_ENABLE_POSTGRES */
 
 OrmConnection *
 orm_connection_new (OrmEngine  *engine,

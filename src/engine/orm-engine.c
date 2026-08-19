@@ -29,6 +29,14 @@
 #include <string.h>
 
 /*
+ * Only the network backends parse a userinfo section, so the helper is
+ * compiled only when one of them is enabled.  Defining it unconditionally
+ * broke the default SQLite-only build outright: nothing referenced it, and
+ * -Werror=unused-function is fatal.
+ */
+#if defined(ORM_ENABLE_POSTGRES) || defined(ORM_ENABLE_MYSQL)
+
+/*
  * Copies @length bytes of @text and percent-decodes them.
  *
  * The userinfo of a connection URL is percent-encoded: a password is very
@@ -57,6 +65,8 @@ orm_uri_component_unescape (const gchar *text,
 
     return (decoded != NULL) ? decoded : g_steal_pointer (&raw);
 }
+
+#endif /* ORM_ENABLE_POSTGRES || ORM_ENABLE_MYSQL */
 
 /*
  * OrmEngine - Database connection factory.
