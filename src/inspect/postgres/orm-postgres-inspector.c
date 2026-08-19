@@ -942,10 +942,10 @@ orm_postgres_inspector_get_foreign_keys (OrmInspector  *self,
  *
  * This is the one place a relation has to be named in SQL rather than
  * bound as a parameter, because a FROM clause takes an identifier.  The
- * name comes back from the catalog query that already matched it, and goes
- * through the dialect's quoting -- but that quoting only wraps in double
- * quotes without doubling any inside, so a name containing one is refused
- * rather than spliced in.
+ * name comes back from the catalog query that already matched it, and
+ * goes through the dialect's quoting, which doubles any quote character
+ * inside it -- so a relation named with one is counted like any other
+ * rather than closing its own quoting.
  *
  * Returns: The count, or -1 on error
  */
@@ -963,15 +963,6 @@ orm_postgres_inspector_exact_row_count (OrmInspector  *self,
     OrmConnection       *connection;
     OrmEngine           *engine;
     OrmDialect          *dialect;
-
-    if (strchr (table, '"') != NULL ||
-        (schema != NULL && strchr (schema, '"') != NULL))
-    {
-        g_set_error (error, ORM_ERROR, ORM_ERROR_NOT_SUPPORTED,
-                     "Cannot count rows of a relation whose name contains a "
-                     "double quote: \"%s\"", table);
-        return -1;
-    }
 
     connection = orm_inspector_get_connection (self);
     engine = (connection != NULL) ? orm_connection_get_engine (connection) : NULL;
