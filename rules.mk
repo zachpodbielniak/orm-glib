@@ -97,6 +97,29 @@ else
 MYSQL_DIALECT_SRCS :=
 endif
 
+# Inspection layer: reading the shape of an existing database
+INSPECT_SRCS := \
+	src/inspect/orm-schema-info.c \
+	src/inspect/orm-inspector.c
+
+ifeq ($(ENABLE_SQLITE),1)
+SQLITE_INSPECT_SRCS := src/inspect/sqlite/orm-sqlite-inspector.c
+else
+SQLITE_INSPECT_SRCS :=
+endif
+
+ifeq ($(ENABLE_POSTGRES),1)
+POSTGRES_INSPECT_SRCS := src/inspect/postgres/orm-postgres-inspector.c
+else
+POSTGRES_INSPECT_SRCS :=
+endif
+
+ifeq ($(ENABLE_MYSQL),1)
+MYSQL_INSPECT_SRCS := src/inspect/mysql/orm-mysql-inspector.c
+else
+MYSQL_INSPECT_SRCS :=
+endif
+
 # SQL expression language
 SQL_SRCS := \
 	src/sql/orm-expression.c \
@@ -120,7 +143,7 @@ ORM_SRCS := \
 	src/orm/orm-query.c
 
 # All source files (Phase 1 through Phase 6)
-LIB_SRCS := $(CORE_SRCS) $(TYPES_SRCS) $(SCHEMA_SRCS) $(DIALECT_SRCS) $(SQLITE_DIALECT_SRCS) $(POSTGRES_DIALECT_SRCS) $(MYSQL_DIALECT_SRCS) $(DRIVER_SRCS) $(SQLITE_DRIVER_SRCS) $(POSTGRES_DRIVER_SRCS) $(MYSQL_DRIVER_SRCS) $(SQL_SRCS) $(ENGINE_SRCS) $(ORM_SRCS)
+LIB_SRCS := $(CORE_SRCS) $(TYPES_SRCS) $(SCHEMA_SRCS) $(DIALECT_SRCS) $(SQLITE_DIALECT_SRCS) $(POSTGRES_DIALECT_SRCS) $(MYSQL_DIALECT_SRCS) $(DRIVER_SRCS) $(SQLITE_DRIVER_SRCS) $(POSTGRES_DRIVER_SRCS) $(MYSQL_DRIVER_SRCS) $(INSPECT_SRCS) $(SQLITE_INSPECT_SRCS) $(POSTGRES_INSPECT_SRCS) $(MYSQL_INSPECT_SRCS) $(SQL_SRCS) $(ENGINE_SRCS) $(ORM_SRCS)
 
 # Object files
 LIB_OBJS := $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(LIB_SRCS))
@@ -154,6 +177,8 @@ PUBLIC_HEADERS_BASE := \
 	src/driver/orm-driver-connection.h \
 	src/driver/orm-driver-result.h \
 	src/driver/orm-driver-registry.h \
+	src/inspect/orm-schema-info.h \
+	src/inspect/orm-inspector.h \
 	src/sql/orm-expression.h \
 	src/sql/orm-column-element.h \
 	src/sql/orm-table-clause.h \
@@ -225,6 +250,7 @@ TEST_SRCS := \
 	tests/test-driver.c \
 	tests/test-result-types.c \
 	tests/test-quoting.c \
+	tests/test-inspector.c \
 	tests/test-isolation.c \
 	tests/test-dialect-sqlite.c \
 	tests/test-expression.c \

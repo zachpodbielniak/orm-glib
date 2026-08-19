@@ -100,11 +100,16 @@
 #include "driver/orm-driver.h"
 #include "driver/orm-driver-registry.h"
 
+#include "inspect/orm-schema-info.h"
+
 #include "engine/orm-row.h"
 #include "engine/orm-result.h"
 #include "engine/orm-connection.h"
 #include "engine/orm-transaction.h"
 #include "engine/orm-engine.h"
+
+/* Inspection */
+#include "inspect/orm-inspector.h"
 
 
 /* ORM layer */

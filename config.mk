@@ -122,7 +122,17 @@ GIR_SCANNER := g-ir-scanner
 GIR_COMPILER := g-ir-compiler
 
 # Build directories
-BUILD_DIR := build
+# Release and debug artifacts live side by side rather than overwriting
+# each other, which is what lets a consumer link one without rebuilding
+# the other -- cmacs's --enable-cmacs-deps-debug switches between them by
+# path.  Every other in-house GLib library here uses the same layout.
+ifeq ($(DEBUG),1)
+    BUILD_TYPE := debug
+else
+    BUILD_TYPE := release
+endif
+
+BUILD_DIR := build/$(BUILD_TYPE)
 OBJ_DIR := $(BUILD_DIR)/objs
 TEST_DIR := $(BUILD_DIR)/tests
 EXAMPLE_DIR := $(BUILD_DIR)/examples
