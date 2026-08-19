@@ -25,6 +25,8 @@
 #include "../core/orm-error.h"
 #include "../schema/orm-metadata.h"
 #include "../dialect/orm-ddl-compiler.h"
+#include "../driver/orm-driver.h"
+#include "../driver/orm-driver-registry.h"
 
 #include <string.h>
 
@@ -88,6 +90,7 @@ struct _OrmEngine
     gchar          *database;         /* Database name */
     OrmDialect     *dialect;
     OrmDialectType  dialect_type;
+    OrmDriver      *driver;           /* Not owned: the registry owns it */
 };
 
 G_DEFINE_TYPE (OrmEngine, orm_engine, G_TYPE_OBJECT)
@@ -434,12 +437,30 @@ orm_engine_new (const gchar  *url,
         return NULL;
     }
 
-    /* Create dialect */
-    self->dialect = orm_dialect_for_type (self->dialect_type);
+    /*
+     * The driver is what makes the URL usable, so resolve it here and
+     * fail now if the backend was not compiled in.  Reporting that at
+     * orm_engine_new() names the problem while the URL is still in
+     * hand; deferring it to connect time produces the same failure with
+     * none of the context.
+     */
+    self->driver = orm_driver_registry_lookup_dialect (
+        orm_driver_registry_get_default (), self->dialect_type);
+
+    if (self->driver == NULL)
+    {
+        g_set_error (error, ORM_ERROR, ORM_ERROR_NOT_SUPPORTED,
+                     "No driver for this URL: the backend was not compiled in");
+        g_object_unref (self);
+        return NULL;
+    }
+
+    self->dialect = orm_driver_create_dialect (self->driver);
     if (self->dialect == NULL)
     {
         g_set_error (error, ORM_ERROR, ORM_ERROR_NOT_SUPPORTED,
-                     "Dialect not available for type %d", self->dialect_type);
+                     "Driver \"%s\" produced no dialect",
+                     orm_driver_get_name (self->driver));
         g_object_unref (self);
         return NULL;
     }
@@ -772,4 +793,19 @@ orm_engine_get_database (OrmEngine *self)
 {
     g_return_val_if_fail (ORM_IS_ENGINE (self), NULL);
     return self->database;
+}
+
+/**
+ * orm_engine_get_driver:
+ * @self: An #OrmEngine
+ *
+ * Gets the driver this engine's URL scheme resolved to.
+ *
+ * Returns: (transfer none) (nullable): The #OrmDriver
+ */
+OrmDriver *
+orm_engine_get_driver (OrmEngine *self)
+{
+    g_return_val_if_fail (ORM_IS_ENGINE (self), NULL);
+    return self->driver;
 }

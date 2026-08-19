@@ -69,6 +69,18 @@ gboolean orm_result_next (OrmResult *self);
 OrmRow * orm_result_get_row (OrmResult *self);
 
 /*
+ * orm_result_get_error:
+ * @self: An #OrmResult
+ *
+ * Gets the error that ended iteration, if one did.  orm_result_next()
+ * returns %FALSE for both a genuine end of results and a failed fetch;
+ * this is how a caller tells them apart.
+ *
+ * Returns: (transfer none) (nullable): The error, or %NULL
+ */
+const GError * orm_result_get_error (OrmResult *self);
+
+/*
  * orm_result_get_column_count:
  * @self: An #OrmResult
  *
@@ -135,30 +147,18 @@ void orm_result_close (OrmResult *self);
  * Internal: Create result from SQLite query.
  */
 #ifdef ORM_ENABLE_SQLITE
-OrmResult * orm_result_new_sqlite (OrmConnection  *connection,
-                                   const gchar    *sql,
-                                   GList          *params,
-                                   GError        **error);
 #endif
 
 /*
  * Internal: Create result from PostgreSQL query.
  */
 #ifdef ORM_ENABLE_POSTGRES
-OrmResult * orm_result_new_postgres (OrmConnection  *connection,
-                                     const gchar    *sql,
-                                     GList          *params,
-                                     GError        **error);
 #endif
 
 /*
  * Internal: Create result from MySQL query.
  */
 #ifdef ORM_ENABLE_MYSQL
-OrmResult * orm_result_new_mysql (OrmConnection  *connection,
-                                  const gchar    *sql,
-                                  GList          *params,
-                                  GError        **error);
 #endif
 
 G_END_DECLS

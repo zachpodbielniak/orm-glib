@@ -21,6 +21,7 @@
  */
 
 #include "orm-transaction.h"
+#include "orm-engine-private.h"
 #include "orm-connection.h"
 #include "../core/orm-error.h"
 
@@ -41,8 +42,6 @@ struct _OrmTransaction
 G_DEFINE_TYPE (OrmTransaction, orm_transaction, G_TYPE_OBJECT)
 
 /* Internal function to set connection transaction state */
-extern void orm_connection_set_in_transaction (OrmConnection *self,
-                                               gboolean       in_transaction);
 
 static void
 orm_transaction_finalize (GObject *object)

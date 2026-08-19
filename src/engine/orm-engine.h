@@ -29,6 +29,7 @@
 
 #include <glib-object.h>
 #include "../core/orm-enums.h"
+#include "../driver/orm-driver.h"
 #include "../dialect/orm-dialect.h"
 
 G_BEGIN_DECLS
@@ -99,6 +100,16 @@ OrmDialect * orm_engine_get_dialect (OrmEngine *self);
  * Returns: The dialect type
  */
 OrmDialectType orm_engine_get_dialect_type (OrmEngine *self);
+
+/*
+ * orm_engine_get_driver:
+ * @self: An #OrmEngine
+ *
+ * Gets the driver this engine's URL scheme resolved to.
+ *
+ * Returns: (transfer none) (nullable): The #OrmDriver
+ */
+OrmDriver * orm_engine_get_driver (OrmEngine *self);
 
 /*
  * orm_engine_get_url:
