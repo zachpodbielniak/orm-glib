@@ -48,7 +48,25 @@ G_DEFINE_TYPE_WITH_CODE (OrmMysqlDdlCompiler, orm_mysql_ddl_compiler, G_TYPE_OBJ
 static gchar *
 quote_identifier (const gchar *identifier)
 {
-    return g_strdup_printf ("`%s`", identifier);
+    GString     *result;
+    const gchar *p;
+
+    /* The quote character is doubled where it appears inside the
+       identifier, so a name containing one cannot close its own
+       quoting and have the remainder parsed as SQL. */
+    result = g_string_new ("`");
+
+    for (p = identifier; *p != '\0'; p++)
+    {
+        if (*p == '`')
+            g_string_append_c (result, '`');
+
+        g_string_append_c (result, *p);
+    }
+
+    g_string_append_c (result, '`');
+
+    return g_string_free (result, FALSE);
 }
 
 /*

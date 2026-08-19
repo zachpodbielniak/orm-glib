@@ -364,6 +364,8 @@ orm_dialect_quote_identifier (OrmDialect  *self,
 {
     OrmDialectInterface *iface;
     gchar quote_char;
+    GString *result;
+    const gchar *p;
 
     g_return_val_if_fail (ORM_IS_DIALECT (self), NULL);
     g_return_val_if_fail (identifier != NULL, NULL);
@@ -376,9 +378,33 @@ orm_dialect_quote_identifier (OrmDialect  *self,
         return iface->quote_identifier (self, identifier);
     }
 
-    /* Default implementation: surround with quote chars */
+    /*
+     * Default implementation: wrap in quote chars, doubling any that
+     * appear inside the identifier.
+     *
+     * The doubling is the entire point.  Without it an identifier
+     * containing the quote character closes its own quoting and the rest
+     * is parsed as SQL -- so a table literally named `x" ; DROP TABLE y --`
+     * executes, and a schema browser reading names out of a catalog it
+     * does not control hands that straight to the server.  Doubling is
+     * how SQL says "a literal quote character", and it is what
+     * orm_dialect_quote_string has always done for string literals.
+     */
     quote_char = orm_dialect_get_identifier_quote_char (self);
-    return g_strdup_printf ("%c%s%c", quote_char, identifier, quote_char);
+    result = g_string_new (NULL);
+    g_string_append_c (result, quote_char);
+
+    for (p = identifier; *p != '\0'; p++)
+    {
+        if (*p == quote_char)
+            g_string_append_c (result, quote_char);
+
+        g_string_append_c (result, *p);
+    }
+
+    g_string_append_c (result, quote_char);
+
+    return g_string_free (result, FALSE);
 }
 
 /**

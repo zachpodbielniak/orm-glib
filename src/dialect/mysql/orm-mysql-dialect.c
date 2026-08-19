@@ -169,14 +169,33 @@ orm_mysql_dialect_get_ddl_compiler (OrmDialect *dialect)
 }
 
 /*
- * MySQL identifier quoting uses backticks.
+ * MySQL identifier quoting uses backticks, and a backtick inside an
+ * identifier is escaped by doubling it -- without that, a name
+ * containing one closes its own quoting and the remainder is parsed as
+ * SQL.
  */
 static gchar *
 orm_mysql_dialect_quote_identifier (OrmDialect  *dialect,
                                      const gchar *identifier)
 {
+    GString     *result;
+    const gchar *p;
+
     (void) dialect;
-    return g_strdup_printf ("`%s`", identifier);
+
+    result = g_string_new ("`");
+
+    for (p = identifier; *p != '\0'; p++)
+    {
+        if (*p == '`')
+            g_string_append_c (result, '`');
+
+        g_string_append_c (result, *p);
+    }
+
+    g_string_append_c (result, '`');
+
+    return g_string_free (result, FALSE);
 }
 
 static void
