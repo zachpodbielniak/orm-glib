@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmDateTimeType, orm_datetime_type, ORM, DATETIME_TYPE, OrmSqlType)
 
-/**
+/*
  * orm_datetime_type_new:
  *
  * Creates a new datetime SQL type. This maps to TEXT (ISO8601) in SQLite,

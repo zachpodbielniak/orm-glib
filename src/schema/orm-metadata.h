@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmMetadata, orm_metadata, ORM, METADATA, GObject)
 
-/**
+/*
  * orm_metadata_new:
  *
  * Creates a new metadata container for table definitions.

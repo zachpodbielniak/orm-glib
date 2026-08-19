@@ -44,7 +44,7 @@ G_DECLARE_FINAL_TYPE (OrmIdentityMap, orm_identity_map, ORM, IDENTITY_MAP, GObje
  * keyed by (GType, primary_key). This is the Identity Map pattern.
  */
 
-/**
+/*
  * orm_identity_map_new:
  *
  * Creates a new identity map.
@@ -53,7 +53,7 @@ G_DECLARE_FINAL_TYPE (OrmIdentityMap, orm_identity_map, ORM, IDENTITY_MAP, GObje
  */
 OrmIdentityMap *    orm_identity_map_new                (void);
 
-/**
+/*
  * orm_identity_map_add:
  * @self: An #OrmIdentityMap
  * @gtype: The GType of the object
@@ -68,7 +68,7 @@ void                orm_identity_map_add                (OrmIdentityMap *self,
                                                          OrmValue       *primary_key,
                                                          GObject        *object);
 
-/**
+/*
  * orm_identity_map_get:
  * @self: An #OrmIdentityMap
  * @gtype: The GType of the object
@@ -82,7 +82,7 @@ GObject *           orm_identity_map_get                (OrmIdentityMap *self,
                                                          GType           gtype,
                                                          OrmValue       *primary_key);
 
-/**
+/*
  * orm_identity_map_contains:
  * @self: An #OrmIdentityMap
  * @gtype: The GType of the object
@@ -96,7 +96,7 @@ gboolean            orm_identity_map_contains           (OrmIdentityMap *self,
                                                          GType           gtype,
                                                          OrmValue       *primary_key);
 
-/**
+/*
  * orm_identity_map_remove:
  * @self: An #OrmIdentityMap
  * @gtype: The GType of the object
@@ -110,7 +110,7 @@ gboolean            orm_identity_map_remove             (OrmIdentityMap *self,
                                                          GType           gtype,
                                                          OrmValue       *primary_key);
 
-/**
+/*
  * orm_identity_map_remove_object:
  * @self: An #OrmIdentityMap
  * @object: The object to remove
@@ -122,7 +122,7 @@ gboolean            orm_identity_map_remove             (OrmIdentityMap *self,
 gboolean            orm_identity_map_remove_object      (OrmIdentityMap *self,
                                                          GObject        *object);
 
-/**
+/*
  * orm_identity_map_clear:
  * @self: An #OrmIdentityMap
  *
@@ -130,7 +130,7 @@ gboolean            orm_identity_map_remove_object      (OrmIdentityMap *self,
  */
 void                orm_identity_map_clear              (OrmIdentityMap *self);
 
-/**
+/*
  * orm_identity_map_get_all:
  * @self: An #OrmIdentityMap
  * @gtype: The GType to filter by (or G_TYPE_NONE for all)
@@ -142,7 +142,7 @@ void                orm_identity_map_clear              (OrmIdentityMap *self);
 GList *             orm_identity_map_get_all            (OrmIdentityMap *self,
                                                          GType           gtype);
 
-/**
+/*
  * orm_identity_map_size:
  * @self: An #OrmIdentityMap
  *

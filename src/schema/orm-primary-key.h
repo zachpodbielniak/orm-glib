@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmPrimaryKey, orm_primary_key, ORM, PRIMARY_KEY, GObject)
 
-/**
+/*
  * orm_primary_key_new:
  * @name: (nullable): The constraint name
  *
@@ -46,7 +46,7 @@ G_DECLARE_FINAL_TYPE (OrmPrimaryKey, orm_primary_key, ORM, PRIMARY_KEY, GObject)
  */
 OrmPrimaryKey * orm_primary_key_new             (const gchar *name);
 
-/**
+/*
  * orm_primary_key_new_with_columns:
  * @name: (nullable): The constraint name
  * @...: NULL-terminated list of column names

@@ -698,6 +698,7 @@ orm_query_count (OrmQuery  *self,
                  GError   **error)
 {
     GString *sql;
+    g_autofree gchar *sql_text = NULL;
     GList *params = NULL;
     g_autoptr(OrmResult) result = NULL;
     OrmConnection *conn;
@@ -749,7 +750,16 @@ orm_query_count (OrmQuery  *self,
     }
 
     conn = orm_session_get_connection (self->session);
-    result = orm_connection_query_with_params (conn, g_string_free (sql, FALSE), params, error);
+
+    /*
+     * g_string_free with FALSE hands back the buffer, so it needs an
+     * owner.  Passed straight as an argument it has none and leaks on
+     * every call.
+     */
+    sql_text = g_string_free (sql, FALSE);
+    sql = NULL;
+
+    result = orm_connection_query_with_params (conn, sql_text, params, error);
     g_list_free_full (params, (GDestroyNotify) orm_value_free);
 
     if (result == NULL)

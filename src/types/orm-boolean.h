@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmBooleanType, orm_boolean_type, ORM, BOOLEAN_TYPE, OrmSqlType)
 
-/**
+/*
  * orm_boolean_type_new:
  *
  * Creates a new boolean SQL type. This maps to INTEGER (0/1) in SQLite,

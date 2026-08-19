@@ -66,7 +66,7 @@ GType orm_sort_order_get_type (void) G_GNUC_CONST;
  * Returns OrmSerializable objects through the session's identity map.
  */
 
-/**
+/*
  * orm_query_new:
  * @session: The session to query through
  * @gtype: The GType to query
@@ -78,7 +78,7 @@ GType orm_sort_order_get_type (void) G_GNUC_CONST;
 OrmQuery *      orm_query_new                   (OrmSession *session,
                                                  GType       gtype);
 
-/**
+/*
  * orm_query_filter:
  * @self: An #OrmQuery
  * @property_name: The property to filter on
@@ -95,7 +95,7 @@ OrmQuery *      orm_query_filter                (OrmQuery    *self,
                                                  OrmCompareOp  op,
                                                  OrmValue    *value);
 
-/**
+/*
  * orm_query_filter_by:
  * @self: An #OrmQuery
  * @property_name: The property to filter on
@@ -110,7 +110,7 @@ OrmQuery *      orm_query_filter_by             (OrmQuery    *self,
                                                  const gchar *property_name,
                                                  OrmValue    *value);
 
-/**
+/*
  * orm_query_order_by:
  * @self: An #OrmQuery
  * @property_name: The property to order by
@@ -125,7 +125,7 @@ OrmQuery *      orm_query_order_by              (OrmQuery     *self,
                                                  const gchar  *property_name,
                                                  OrmSortOrder  order);
 
-/**
+/*
  * orm_query_limit:
  * @self: An #OrmQuery
  * @limit: Maximum number of results
@@ -137,7 +137,7 @@ OrmQuery *      orm_query_order_by              (OrmQuery     *self,
 OrmQuery *      orm_query_limit                 (OrmQuery *self,
                                                  gint      limit);
 
-/**
+/*
  * orm_query_offset:
  * @self: An #OrmQuery
  * @offset: Number of results to skip
@@ -149,7 +149,7 @@ OrmQuery *      orm_query_limit                 (OrmQuery *self,
 OrmQuery *      orm_query_offset                (OrmQuery *self,
                                                  gint      offset);
 
-/**
+/*
  * orm_query_all:
  * @self: An #OrmQuery
  * @error: Return location for error
@@ -161,7 +161,7 @@ OrmQuery *      orm_query_offset                (OrmQuery *self,
 GList *         orm_query_all                   (OrmQuery  *self,
                                                  GError   **error);
 
-/**
+/*
  * orm_query_first:
  * @self: An #OrmQuery
  * @error: Return location for error
@@ -173,7 +173,7 @@ GList *         orm_query_all                   (OrmQuery  *self,
 GObject *       orm_query_first                 (OrmQuery  *self,
                                                  GError   **error);
 
-/**
+/*
  * orm_query_one:
  * @self: An #OrmQuery
  * @error: Return location for error
@@ -186,7 +186,7 @@ GObject *       orm_query_first                 (OrmQuery  *self,
 GObject *       orm_query_one                   (OrmQuery  *self,
                                                  GError   **error);
 
-/**
+/*
  * orm_query_one_or_none:
  * @self: An #OrmQuery
  * @error: Return location for error
@@ -199,7 +199,7 @@ GObject *       orm_query_one                   (OrmQuery  *self,
 GObject *       orm_query_one_or_none           (OrmQuery  *self,
                                                  GError   **error);
 
-/**
+/*
  * orm_query_count:
  * @self: An #OrmQuery
  * @error: Return location for error
@@ -211,7 +211,7 @@ GObject *       orm_query_one_or_none           (OrmQuery  *self,
 gint64          orm_query_count                 (OrmQuery  *self,
                                                  GError   **error);
 
-/**
+/*
  * orm_query_exists:
  * @self: An #OrmQuery
  * @error: Return location for error
@@ -223,7 +223,7 @@ gint64          orm_query_count                 (OrmQuery  *self,
 gboolean        orm_query_exists                (OrmQuery  *self,
                                                  GError   **error);
 
-/**
+/*
  * orm_query_delete:
  * @self: An #OrmQuery
  * @error: Return location for error
@@ -235,7 +235,7 @@ gboolean        orm_query_exists                (OrmQuery  *self,
 gint64          orm_query_delete                (OrmQuery  *self,
                                                  GError   **error);
 
-/**
+/*
  * orm_query_get_sql:
  * @self: An #OrmQuery
  *

@@ -37,7 +37,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmForeignKey, orm_foreign_key, ORM, FOREIGN_KEY, GObject)
 
-/**
+/*
  * orm_foreign_key_new:
  * @name: (nullable): The constraint name
  * @ref_table: The referenced table name

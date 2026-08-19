@@ -75,7 +75,7 @@ GType orm_object_state_get_type (void) G_GNUC_CONST;
  * and coordinates persistence operations through the connection.
  */
 
-/**
+/*
  * orm_session_new:
  * @engine: The database engine
  *
@@ -86,7 +86,7 @@ GType orm_object_state_get_type (void) G_GNUC_CONST;
  */
 OrmSession *        orm_session_new                     (OrmEngine *engine);
 
-/**
+/*
  * orm_session_new_with_connection:
  * @connection: An existing connection
  *
@@ -96,7 +96,7 @@ OrmSession *        orm_session_new                     (OrmEngine *engine);
  */
 OrmSession *        orm_session_new_with_connection     (OrmConnection *connection);
 
-/**
+/*
  * orm_session_get_connection:
  * @self: An #OrmSession
  *
@@ -106,7 +106,7 @@ OrmSession *        orm_session_new_with_connection     (OrmConnection *connecti
  */
 OrmConnection *     orm_session_get_connection          (OrmSession *self);
 
-/**
+/*
  * orm_session_register_mapper:
  * @self: An #OrmSession
  * @mapper: The mapper to register
@@ -117,7 +117,7 @@ OrmConnection *     orm_session_get_connection          (OrmSession *self);
 void                orm_session_register_mapper         (OrmSession *self,
                                                          OrmMapper  *mapper);
 
-/**
+/*
  * orm_session_get_mapper:
  * @self: An #OrmSession
  * @gtype: The GType to look up
@@ -129,7 +129,7 @@ void                orm_session_register_mapper         (OrmSession *self,
 OrmMapper *         orm_session_get_mapper              (OrmSession *self,
                                                          GType       gtype);
 
-/**
+/*
  * orm_session_add:
  * @self: An #OrmSession
  * @object: The object to add
@@ -140,7 +140,7 @@ OrmMapper *         orm_session_get_mapper              (OrmSession *self,
 void                orm_session_add                     (OrmSession *self,
                                                          GObject    *object);
 
-/**
+/*
  * orm_session_add_all:
  * @self: An #OrmSession
  * @objects: (element-type GObject): List of objects to add
@@ -150,7 +150,7 @@ void                orm_session_add                     (OrmSession *self,
 void                orm_session_add_all                 (OrmSession *self,
                                                          GList      *objects);
 
-/**
+/*
  * orm_session_delete:
  * @self: An #OrmSession
  * @object: The object to delete
@@ -160,7 +160,7 @@ void                orm_session_add_all                 (OrmSession *self,
 void                orm_session_delete                  (OrmSession *self,
                                                          GObject    *object);
 
-/**
+/*
  * orm_session_expunge:
  * @self: An #OrmSession
  * @object: The object to remove
@@ -171,7 +171,7 @@ void                orm_session_delete                  (OrmSession *self,
 void                orm_session_expunge                 (OrmSession *self,
                                                          GObject    *object);
 
-/**
+/*
  * orm_session_get_object_state:
  * @self: An #OrmSession
  * @object: The object to check
@@ -183,7 +183,7 @@ void                orm_session_expunge                 (OrmSession *self,
 OrmObjectState      orm_session_get_object_state        (OrmSession *self,
                                                          GObject    *object);
 
-/**
+/*
  * orm_session_is_dirty:
  * @self: An #OrmSession
  *
@@ -193,7 +193,7 @@ OrmObjectState      orm_session_get_object_state        (OrmSession *self,
  */
 gboolean            orm_session_is_dirty                (OrmSession *self);
 
-/**
+/*
  * orm_session_flush:
  * @self: An #OrmSession
  * @error: Return location for error
@@ -206,7 +206,7 @@ gboolean            orm_session_is_dirty                (OrmSession *self);
 gboolean            orm_session_flush                   (OrmSession  *self,
                                                          GError     **error);
 
-/**
+/*
  * orm_session_commit:
  * @self: An #OrmSession
  * @error: Return location for error
@@ -219,7 +219,7 @@ gboolean            orm_session_flush                   (OrmSession  *self,
 gboolean            orm_session_commit                  (OrmSession  *self,
                                                          GError     **error);
 
-/**
+/*
  * orm_session_rollback:
  * @self: An #OrmSession
  *
@@ -228,7 +228,7 @@ gboolean            orm_session_commit                  (OrmSession  *self,
  */
 void                orm_session_rollback                (OrmSession *self);
 
-/**
+/*
  * orm_session_refresh:
  * @self: An #OrmSession
  * @object: The object to refresh
@@ -242,7 +242,7 @@ gboolean            orm_session_refresh                 (OrmSession  *self,
                                                          GObject     *object,
                                                          GError     **error);
 
-/**
+/*
  * orm_session_get:
  * @self: An #OrmSession
  * @gtype: The GType of the object
@@ -259,7 +259,7 @@ GObject *           orm_session_get                     (OrmSession  *self,
                                                          OrmValue    *primary_key,
                                                          GError     **error);
 
-/**
+/*
  * orm_session_query:
  * @self: An #OrmSession
  * @gtype: The GType to query
@@ -271,7 +271,7 @@ GObject *           orm_session_get                     (OrmSession  *self,
 OrmQuery *          orm_session_query                   (OrmSession *self,
                                                          GType       gtype);
 
-/**
+/*
  * orm_session_execute:
  * @self: An #OrmSession
  * @sql: Raw SQL to execute
@@ -285,7 +285,7 @@ gboolean            orm_session_execute                 (OrmSession  *self,
                                                          const gchar *sql,
                                                          GError     **error);
 
-/**
+/*
  * orm_session_close:
  * @self: An #OrmSession
  *
@@ -294,7 +294,7 @@ gboolean            orm_session_execute                 (OrmSession  *self,
  */
 void                orm_session_close                   (OrmSession *self);
 
-/**
+/*
  * orm_session_is_closed:
  * @self: An #OrmSession
  *

@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmBlobType, orm_blob_type, ORM, BLOB_TYPE, OrmSqlType)
 
-/**
+/*
  * orm_blob_type_new:
  *
  * Creates a new binary blob SQL type. This maps to BLOB in SQLite,

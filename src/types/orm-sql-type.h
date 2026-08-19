@@ -126,7 +126,15 @@ gboolean        orm_sql_type_get_nullable       (OrmSqlType *self);
 void            orm_sql_type_set_nullable       (OrmSqlType *self,
                                                  gboolean    nullable);
 
-/* GType to SQL type mapping */
+/*
+ * orm_sql_type_for_gtype:
+ * @gtype: A #GType to map
+ *
+ * Returns the SQL type that best represents @gtype.
+ *
+ * Returns: (transfer full) (nullable): A new #OrmSqlType, or %NULL when
+ *   @gtype has no SQL equivalent
+ */
 OrmSqlType *    orm_sql_type_for_gtype          (GType gtype);
 
 G_END_DECLS

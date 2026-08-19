@@ -70,7 +70,7 @@ GType orm_property_flags_get_type (void) G_GNUC_CONST;
  * Contains the property name, column name, SQL type, and mapping options.
  */
 
-/**
+/*
  * orm_property_new:
  * @property_name: The GObject property name
  * @column_name: (nullable): The database column name (defaults to property_name)
@@ -86,7 +86,7 @@ OrmProperty *   orm_property_new                (const gchar      *property_name
                                                  OrmSqlType       *sql_type,
                                                  OrmPropertyFlags  flags);
 
-/**
+/*
  * orm_property_new_from_pspec:
  * @pspec: The property specification
  * @column_name: (nullable): The database column name (defaults to property name)
@@ -101,7 +101,7 @@ OrmProperty *   orm_property_new_from_pspec     (GParamSpec       *pspec,
                                                  const gchar      *column_name,
                                                  OrmPropertyFlags  flags);
 
-/**
+/*
  * orm_property_get_property_name:
  * @self: An #OrmProperty
  *
@@ -111,7 +111,7 @@ OrmProperty *   orm_property_new_from_pspec     (GParamSpec       *pspec,
  */
 const gchar *   orm_property_get_property_name  (OrmProperty *self);
 
-/**
+/*
  * orm_property_get_column_name:
  * @self: An #OrmProperty
  *
@@ -121,7 +121,7 @@ const gchar *   orm_property_get_property_name  (OrmProperty *self);
  */
 const gchar *   orm_property_get_column_name    (OrmProperty *self);
 
-/**
+/*
  * orm_property_get_sql_type:
  * @self: An #OrmProperty
  *
@@ -131,7 +131,7 @@ const gchar *   orm_property_get_column_name    (OrmProperty *self);
  */
 OrmSqlType *    orm_property_get_sql_type       (OrmProperty *self);
 
-/**
+/*
  * orm_property_get_flags:
  * @self: An #OrmProperty
  *
@@ -141,7 +141,7 @@ OrmSqlType *    orm_property_get_sql_type       (OrmProperty *self);
  */
 OrmPropertyFlags orm_property_get_flags         (OrmProperty *self);
 
-/**
+/*
  * orm_property_is_primary_key:
  * @self: An #OrmProperty
  *
@@ -151,7 +151,7 @@ OrmPropertyFlags orm_property_get_flags         (OrmProperty *self);
  */
 gboolean        orm_property_is_primary_key     (OrmProperty *self);
 
-/**
+/*
  * orm_property_is_nullable:
  * @self: An #OrmProperty
  *
@@ -161,7 +161,7 @@ gboolean        orm_property_is_primary_key     (OrmProperty *self);
  */
 gboolean        orm_property_is_nullable        (OrmProperty *self);
 
-/**
+/*
  * orm_property_is_unique:
  * @self: An #OrmProperty
  *
@@ -171,7 +171,7 @@ gboolean        orm_property_is_nullable        (OrmProperty *self);
  */
 gboolean        orm_property_is_unique          (OrmProperty *self);
 
-/**
+/*
  * orm_property_is_auto_increment:
  * @self: An #OrmProperty
  *
@@ -181,7 +181,7 @@ gboolean        orm_property_is_unique          (OrmProperty *self);
  */
 gboolean        orm_property_is_auto_increment  (OrmProperty *self);
 
-/**
+/*
  * orm_property_set_default_value:
  * @self: An #OrmProperty
  * @default_value: (nullable) (transfer none): The default value
@@ -191,7 +191,7 @@ gboolean        orm_property_is_auto_increment  (OrmProperty *self);
 void            orm_property_set_default_value  (OrmProperty *self,
                                                  OrmValue    *default_value);
 
-/**
+/*
  * orm_property_get_default_value:
  * @self: An #OrmProperty
  *
@@ -201,7 +201,7 @@ void            orm_property_set_default_value  (OrmProperty *self,
  */
 OrmValue *      orm_property_get_default_value  (OrmProperty *self);
 
-/**
+/*
  * orm_property_to_column:
  * @self: An #OrmProperty
  *

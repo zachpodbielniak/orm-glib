@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmInteger, orm_integer, ORM, INTEGER, OrmSqlType)
 
-/**
+/*
  * orm_integer_new:
  *
  * Creates a new integer SQL type. This maps to INTEGER in SQLite,
@@ -50,7 +50,7 @@ OrmInteger *    orm_integer_new     (void);
 
 G_DECLARE_FINAL_TYPE (OrmBigInt, orm_bigint, ORM, BIGINT, OrmSqlType)
 
-/**
+/*
  * orm_bigint_new:
  *
  * Creates a new bigint SQL type for 64-bit integers. This maps to

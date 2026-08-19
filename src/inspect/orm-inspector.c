@@ -1070,8 +1070,9 @@ orm_inspector_estimate_row_count_job (gpointer  data,
  * @table: The relation name
  * @schema: (nullable): The schema, or %NULL for the default
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the count is known
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the
+ *   count is known
+ * @user_data: Data for @callback
  *
  * Counts the rows in @table, on the connection's worker thread.
  */

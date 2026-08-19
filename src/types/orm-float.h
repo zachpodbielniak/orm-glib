@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmFloatType, orm_float_type, ORM, FLOAT_TYPE, OrmSqlType)
 
-/**
+/*
  * orm_float_type_new:
  *
  * Creates a new single-precision float SQL type. This maps to REAL in
@@ -52,7 +52,7 @@ OrmFloatType *      orm_float_type_new      (void);
 
 G_DECLARE_FINAL_TYPE (OrmDoubleType, orm_double_type, ORM, DOUBLE_TYPE, OrmSqlType)
 
-/**
+/*
  * orm_double_type_new:
  *
  * Creates a new double-precision float SQL type. This maps to REAL in

@@ -175,7 +175,7 @@ const gchar *   orm_serializable_get_primary_key        (OrmSerializable *serial
 
 /* Convenience functions */
 
-/**
+/*
  * orm_serializable_get_property_value:
  * @serializable: The serializable object
  * @property_name: The property name
@@ -187,7 +187,7 @@ const gchar *   orm_serializable_get_primary_key        (OrmSerializable *serial
 OrmValue *      orm_serializable_get_property_value     (OrmSerializable *serializable,
                                                          const gchar     *property_name);
 
-/**
+/*
  * orm_serializable_set_property_value:
  * @serializable: The serializable object
  * @property_name: The property name
@@ -201,7 +201,7 @@ gboolean        orm_serializable_set_property_value     (OrmSerializable *serial
                                                          const gchar     *property_name,
                                                          OrmValue        *db_value);
 
-/**
+/*
  * orm_serializable_get_primary_key_value:
  * @serializable: The serializable object
  *

@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmTable, orm_table, ORM, TABLE, GObject)
 
-/**
+/*
  * orm_table_new:
  * @name: The table name
  * @metadata: (nullable): The metadata container

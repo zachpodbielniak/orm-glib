@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmIndex, orm_index, ORM, INDEX, GObject)
 
-/**
+/*
  * orm_index_new:
  * @name: The index name
  *
@@ -46,7 +46,7 @@ G_DECLARE_FINAL_TYPE (OrmIndex, orm_index, ORM, INDEX, GObject)
  */
 OrmIndex *      orm_index_new               (const gchar *name);
 
-/**
+/*
  * orm_index_new_with_columns:
  * @name: The index name
  * @...: NULL-terminated list of column names

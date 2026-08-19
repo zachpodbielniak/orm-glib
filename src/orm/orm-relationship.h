@@ -86,7 +86,7 @@ GType orm_cascade_get_type (void) G_GNUC_CONST;
  * related objects should be loaded and cascaded.
  */
 
-/**
+/*
  * orm_relationship_new:
  * @name: The relationship name (property name on parent)
  * @rel_type: The type of relationship
@@ -102,7 +102,7 @@ OrmRelationship *   orm_relationship_new                (const gchar          *n
                                                          GType                 source_type,
                                                          GType                 target_type);
 
-/**
+/*
  * orm_relationship_get_name:
  * @self: An #OrmRelationship
  *
@@ -112,7 +112,7 @@ OrmRelationship *   orm_relationship_new                (const gchar          *n
  */
 const gchar *       orm_relationship_get_name           (OrmRelationship *self);
 
-/**
+/*
  * orm_relationship_get_relationship_type:
  * @self: An #OrmRelationship
  *
@@ -122,7 +122,7 @@ const gchar *       orm_relationship_get_name           (OrmRelationship *self);
  */
 OrmRelationshipType orm_relationship_get_relationship_type (OrmRelationship *self);
 
-/**
+/*
  * orm_relationship_get_source_type:
  * @self: An #OrmRelationship
  *
@@ -132,7 +132,7 @@ OrmRelationshipType orm_relationship_get_relationship_type (OrmRelationship *sel
  */
 GType               orm_relationship_get_source_type    (OrmRelationship *self);
 
-/**
+/*
  * orm_relationship_get_target_type:
  * @self: An #OrmRelationship
  *
@@ -142,7 +142,7 @@ GType               orm_relationship_get_source_type    (OrmRelationship *self);
  */
 GType               orm_relationship_get_target_type    (OrmRelationship *self);
 
-/**
+/*
  * orm_relationship_set_foreign_key:
  * @self: An #OrmRelationship
  * @local_column: The local column name
@@ -154,7 +154,7 @@ void                orm_relationship_set_foreign_key    (OrmRelationship *self,
                                                          const gchar     *local_column,
                                                          const gchar     *remote_column);
 
-/**
+/*
  * orm_relationship_get_local_column:
  * @self: An #OrmRelationship
  *
@@ -164,7 +164,7 @@ void                orm_relationship_set_foreign_key    (OrmRelationship *self,
  */
 const gchar *       orm_relationship_get_local_column   (OrmRelationship *self);
 
-/**
+/*
  * orm_relationship_get_remote_column:
  * @self: An #OrmRelationship
  *
@@ -174,7 +174,7 @@ const gchar *       orm_relationship_get_local_column   (OrmRelationship *self);
  */
 const gchar *       orm_relationship_get_remote_column  (OrmRelationship *self);
 
-/**
+/*
  * orm_relationship_set_join_table:
  * @self: An #OrmRelationship
  * @table_name: The join table name
@@ -188,7 +188,7 @@ void                orm_relationship_set_join_table     (OrmRelationship *self,
                                                          const gchar     *source_column,
                                                          const gchar     *target_column);
 
-/**
+/*
  * orm_relationship_get_join_table:
  * @self: An #OrmRelationship
  *
@@ -198,7 +198,7 @@ void                orm_relationship_set_join_table     (OrmRelationship *self,
  */
 const gchar *       orm_relationship_get_join_table     (OrmRelationship *self);
 
-/**
+/*
  * orm_relationship_set_load_strategy:
  * @self: An #OrmRelationship
  * @strategy: The load strategy
@@ -208,7 +208,7 @@ const gchar *       orm_relationship_get_join_table     (OrmRelationship *self);
 void                orm_relationship_set_load_strategy  (OrmRelationship *self,
                                                          OrmLoadStrategy  strategy);
 
-/**
+/*
  * orm_relationship_get_load_strategy:
  * @self: An #OrmRelationship
  *
@@ -218,7 +218,7 @@ void                orm_relationship_set_load_strategy  (OrmRelationship *self,
  */
 OrmLoadStrategy     orm_relationship_get_load_strategy  (OrmRelationship *self);
 
-/**
+/*
  * orm_relationship_set_cascade:
  * @self: An #OrmRelationship
  * @cascade: The cascade flags
@@ -228,7 +228,7 @@ OrmLoadStrategy     orm_relationship_get_load_strategy  (OrmRelationship *self);
 void                orm_relationship_set_cascade        (OrmRelationship *self,
                                                          OrmCascade       cascade);
 
-/**
+/*
  * orm_relationship_get_cascade:
  * @self: An #OrmRelationship
  *
@@ -238,7 +238,7 @@ void                orm_relationship_set_cascade        (OrmRelationship *self,
  */
 OrmCascade          orm_relationship_get_cascade        (OrmRelationship *self);
 
-/**
+/*
  * orm_relationship_set_back_populates:
  * @self: An #OrmRelationship
  * @property_name: The property on the related object
@@ -248,7 +248,7 @@ OrmCascade          orm_relationship_get_cascade        (OrmRelationship *self);
 void                orm_relationship_set_back_populates (OrmRelationship *self,
                                                          const gchar     *property_name);
 
-/**
+/*
  * orm_relationship_get_back_populates:
  * @self: An #OrmRelationship
  *

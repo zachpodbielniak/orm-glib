@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmText, orm_text, ORM, TEXT, OrmSqlType)
 
-/**
+/*
  * orm_text_new:
  *
  * Creates a new text SQL type for large strings. This maps to TEXT

@@ -311,12 +311,7 @@ static void
 test_async_ordering (AsyncFixture  *fixture,
                      gconstpointer  user_data)
 {
-    gint64 started;
-    gint64 submitted;
-    gint64 finished;
-    guint  i;
-
-    started = g_get_monotonic_time ();
+    guint i;
 
     /*
      * The first query is the slowest by a wide margin, so a pool would
@@ -333,19 +328,7 @@ test_async_ordering (AsyncFixture  *fixture,
     orm_connection_query_async (fixture->connection, "SELECT 'third'",
                                 NULL, NULL, on_ordered_ready, fixture);
 
-    submitted = g_get_monotonic_time ();
-
     async_run (fixture);
-
-    finished = g_get_monotonic_time ();
-
-    /*
-     * Submitting must be far cheaper than running.  Stated as a ratio
-     * rather than a deadline so it means the same thing on a slow
-     * machine: if the queries had run on this thread, starting them
-     * would have taken essentially the whole elapsed time.
-     */
-    g_assert_cmpint ((submitted - started) * 4, <, finished - started);
 
     g_assert_cmpuint (fixture->order->len, ==, 3);
 
@@ -355,6 +338,66 @@ test_async_ordering (AsyncFixture  *fixture,
     g_assert_cmpstr (g_ptr_array_index (fixture->order, 0), ==, "first");
     g_assert_cmpstr (g_ptr_array_index (fixture->order, 1), ==, "second");
     g_assert_cmpstr (g_ptr_array_index (fixture->order, 2), ==, "third");
+}
+
+/* ------------------------------------------------------------------ */
+/* The work really does leave the calling thread                      */
+/* ------------------------------------------------------------------ */
+
+static gint64 off_thread_submitted;
+static gint64 off_thread_completed;
+
+static void
+on_off_thread_ready (GObject      *source,
+                     GAsyncResult *result,
+                     gpointer      user_data)
+{
+    AsyncFixture      *fixture = (AsyncFixture *) user_data;
+    g_autoptr(GError)  error = NULL;
+
+    off_thread_completed = g_get_monotonic_time ();
+
+    g_assert_true (orm_connection_execute_finish (ORM_CONNECTION (source),
+                                                  result, &error));
+    g_assert_no_error (error);
+
+    g_main_loop_quit (fixture->loop);
+}
+
+static void
+test_async_off_thread (AsyncFixture  *fixture,
+                       gconstpointer  user_data)
+{
+    gint64 started;
+    gint64 submitting;
+    gint64 running;
+
+    /* A statement that takes long enough that the difference is not noise. */
+    started = g_get_monotonic_time ();
+
+    orm_connection_execute_async (fixture->connection,
+                                  "WITH RECURSIVE c(i) AS ("
+                                  "  SELECT 1 UNION ALL"
+                                  "  SELECT i + 1 FROM c WHERE i < 1000000)"
+                                  "SELECT count(*) FROM c",
+                                  NULL, NULL, on_off_thread_ready, fixture);
+
+    off_thread_submitted = g_get_monotonic_time ();
+
+    async_run (fixture);
+
+    submitting = off_thread_submitted - started;
+    running = off_thread_completed - off_thread_submitted;
+
+    /*
+     * Had the statement run on this thread, starting it would have cost
+     * everything and waiting for it nothing.  Comparing the two rather
+     * than checking a deadline keeps this meaningful on a slow machine
+     * and unflaky on a loaded one: the gap is three orders of magnitude,
+     * not a few percent.
+     */
+    g_assert_cmpint (running, >, 0);
+    g_assert_cmpint (submitting * 10, <, running);
 }
 
 /* ------------------------------------------------------------------ */
@@ -968,6 +1011,9 @@ main (int    argc,
                 async_fixture_teardown);
     g_test_add ("/async/ordering", AsyncFixture, NULL,
                 async_fixture_setup, test_async_ordering,
+                async_fixture_teardown);
+    g_test_add ("/async/off-thread", AsyncFixture, NULL,
+                async_fixture_setup, test_async_off_thread,
                 async_fixture_teardown);
     g_test_add ("/async/sync-interleave", AsyncFixture, NULL,
                 async_fixture_setup, test_async_sync_interleave,

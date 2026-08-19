@@ -46,7 +46,7 @@ G_DECLARE_FINAL_TYPE (OrmMapper, orm_mapper, ORM, MAPPER, GObject)
  * Used to generate table schemas and convert between objects and rows.
  */
 
-/**
+/*
  * orm_mapper_new:
  * @gtype: The GType to map
  * @table_name: (nullable): The table name (defaults to lowercase type name)
@@ -58,7 +58,7 @@ G_DECLARE_FINAL_TYPE (OrmMapper, orm_mapper, ORM, MAPPER, GObject)
 OrmMapper *         orm_mapper_new                      (GType        gtype,
                                                          const gchar *table_name);
 
-/**
+/*
  * orm_mapper_new_from_serializable:
  * @gtype: A GType implementing OrmSerializable
  *
@@ -69,7 +69,7 @@ OrmMapper *         orm_mapper_new                      (GType        gtype,
  */
 OrmMapper *         orm_mapper_new_from_serializable    (GType gtype);
 
-/**
+/*
  * orm_mapper_get_gtype:
  * @self: An #OrmMapper
  *
@@ -79,7 +79,7 @@ OrmMapper *         orm_mapper_new_from_serializable    (GType gtype);
  */
 GType               orm_mapper_get_gtype                (OrmMapper *self);
 
-/**
+/*
  * orm_mapper_get_table_name:
  * @self: An #OrmMapper
  *
@@ -89,7 +89,7 @@ GType               orm_mapper_get_gtype                (OrmMapper *self);
  */
 const gchar *       orm_mapper_get_table_name           (OrmMapper *self);
 
-/**
+/*
  * orm_mapper_add_property:
  * @self: An #OrmMapper
  * @property: (transfer none): The property mapping to add
@@ -99,7 +99,7 @@ const gchar *       orm_mapper_get_table_name           (OrmMapper *self);
 void                orm_mapper_add_property             (OrmMapper   *self,
                                                          OrmProperty *property);
 
-/**
+/*
  * orm_mapper_get_property:
  * @self: An #OrmMapper
  * @property_name: The property name
@@ -111,7 +111,7 @@ void                orm_mapper_add_property             (OrmMapper   *self,
 OrmProperty *       orm_mapper_get_property             (OrmMapper   *self,
                                                          const gchar *property_name);
 
-/**
+/*
  * orm_mapper_get_property_by_column:
  * @self: An #OrmMapper
  * @column_name: The column name
@@ -123,7 +123,7 @@ OrmProperty *       orm_mapper_get_property             (OrmMapper   *self,
 OrmProperty *       orm_mapper_get_property_by_column   (OrmMapper   *self,
                                                          const gchar *column_name);
 
-/**
+/*
  * orm_mapper_get_properties:
  * @self: An #OrmMapper
  *
@@ -133,7 +133,7 @@ OrmProperty *       orm_mapper_get_property_by_column   (OrmMapper   *self,
  */
 GList *             orm_mapper_get_properties           (OrmMapper *self);
 
-/**
+/*
  * orm_mapper_get_primary_key_property:
  * @self: An #OrmMapper
  *
@@ -143,7 +143,7 @@ GList *             orm_mapper_get_properties           (OrmMapper *self);
  */
 OrmProperty *       orm_mapper_get_primary_key_property (OrmMapper *self);
 
-/**
+/*
  * orm_mapper_add_relationship:
  * @self: An #OrmMapper
  * @relationship: (transfer none): The relationship to add
@@ -153,7 +153,7 @@ OrmProperty *       orm_mapper_get_primary_key_property (OrmMapper *self);
 void                orm_mapper_add_relationship         (OrmMapper       *self,
                                                          OrmRelationship *relationship);
 
-/**
+/*
  * orm_mapper_get_relationship:
  * @self: An #OrmMapper
  * @name: The relationship name
@@ -165,7 +165,7 @@ void                orm_mapper_add_relationship         (OrmMapper       *self,
 OrmRelationship *   orm_mapper_get_relationship         (OrmMapper   *self,
                                                          const gchar *name);
 
-/**
+/*
  * orm_mapper_get_relationships:
  * @self: An #OrmMapper
  *
@@ -175,7 +175,7 @@ OrmRelationship *   orm_mapper_get_relationship         (OrmMapper   *self,
  */
 GList *             orm_mapper_get_relationships        (OrmMapper *self);
 
-/**
+/*
  * orm_mapper_to_table:
  * @self: An #OrmMapper
  *
@@ -185,7 +185,7 @@ GList *             orm_mapper_get_relationships        (OrmMapper *self);
  */
 OrmTable *          orm_mapper_to_table                 (OrmMapper *self);
 
-/**
+/*
  * orm_mapper_get_column_names:
  * @self: An #OrmMapper
  *
@@ -195,7 +195,7 @@ OrmTable *          orm_mapper_to_table                 (OrmMapper *self);
  */
 GList *             orm_mapper_get_column_names         (OrmMapper *self);
 
-/**
+/*
  * orm_mapper_get_insert_columns:
  * @self: An #OrmMapper
  *

@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmString, orm_string, ORM, STRING, OrmSqlType)
 
-/**
+/*
  * orm_string_new:
  * @length: Maximum length of the string (0 for unlimited)
  *
@@ -48,7 +48,7 @@ G_DECLARE_FINAL_TYPE (OrmString, orm_string, ORM, STRING, OrmSqlType)
  */
 OrmString *     orm_string_new          (guint length);
 
-/**
+/*
  * orm_string_get_length:
  * @self: An #OrmString
  *

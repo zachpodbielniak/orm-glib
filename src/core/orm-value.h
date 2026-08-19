@@ -41,7 +41,7 @@ G_BEGIN_DECLS
  */
 typedef struct _OrmValue OrmValue;
 
-/**
+/*
  * OrmValue:
  *
  * A boxed type that wraps database values. This provides a type-safe

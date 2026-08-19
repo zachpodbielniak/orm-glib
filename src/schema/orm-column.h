@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (OrmColumn, orm_column, ORM, COLUMN, GObject)
 
-/**
+/*
  * orm_column_new:
  * @name: The column name
  * @type: The SQL type for this column
