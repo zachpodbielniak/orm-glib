@@ -705,6 +705,7 @@ orm_query_count (OrmQuery  *self,
     OrmValue *value;
     GList *l;
     gboolean first;
+    gint64 count;
 
     g_return_val_if_fail (ORM_IS_QUERY (self), -1);
 
@@ -773,7 +774,7 @@ orm_query_count (OrmQuery  *self,
         return 0;
     }
 
-    gint64 count = orm_value_get_integer (value);
+    count = orm_value_get_integer (value);
     orm_value_free (value);
 
     return count;
