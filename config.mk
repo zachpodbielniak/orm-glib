@@ -113,6 +113,26 @@ endif
 PKG_CFLAGS := $(shell pkg-config --cflags $(PKG_DEPS))
 PKG_LIBS := $(shell pkg-config --libs $(PKG_DEPS))
 
+# Dependency headers come in as SYSTEM headers, so their warnings are
+# not ours.
+#
+# pkg-config emits plain -I, and -I does not make a directory a system
+# directory -- so with -Werror above, a warning inside somebody else's
+# header is a build failure.  That is not hypothetical: GLib 2.80's
+# gatomic.h trips -Wincompatible-pointer-types on GCC 13
+#
+#   gatomic.h:131:5: error: argument 2 of '__atomic_load' discards
+#                    'volatile' qualifier
+#
+# which killed the whole Ubuntu 24.04 image build in orm-enums.c, a file
+# that does nothing but include glib.  Only ABSOLUTE paths are
+# rewritten: orm-glib's own -Isrc must keep warning, since the point of
+# -Werror is our code.
+#
+# libregnum and screensavers already do this; orm-glib was the one dep
+# with -Werror and without it.
+PKG_CFLAGS := $(patsubst -I/%,-isystem /%,$(PKG_CFLAGS))
+
 # Final flags
 CFLAGS := $(CFLAGS_BASE) $(PKG_CFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(LDFLAGS_BASE) $(PKG_LIBS) $(EXTRA_LDFLAGS)
