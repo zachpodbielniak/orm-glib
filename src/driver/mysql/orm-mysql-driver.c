@@ -25,7 +25,15 @@
 #include "../../engine/orm-engine.h"
 #include "../../dialect/mysql/orm-mysql-dialect.h"
 
-#include <mysql/mysql.h>
+/*
+ * <mysql.h>, not <mysql/mysql.h>: the connector's own include directory
+ * comes from pkg-config, and where that directory sits differs by
+ * distribution.  Fedora's mariadb-connector-c-devel puts the header in
+ * /usr/include/mysql, so both spellings happen to work; Debian and
+ * Ubuntu's libmariadb-dev puts it in /usr/include/mariadb, where only
+ * this one does.  Relying on the pkg-config path is the portable form.
+ */
+#include <mysql.h>
 #include <string.h>
 
 /*
