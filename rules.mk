@@ -27,9 +27,12 @@ SCHEMA_SRCS := \
 	src/schema/orm-foreign-key.c \
 	src/schema/orm-index.c
 
+# Explicit versioned schema runner
+MIGRATION_SRCS := \
+	src/migration/orm-migrator.c
+
 # Engine layer
 ENGINE_SRCS := \
-	src/migration/orm-migrator.c \
 	src/engine/orm-engine.c \
 	src/engine/orm-connection.c \
 	src/engine/orm-transaction.c \
@@ -152,7 +155,7 @@ ORM_SRCS := \
 	src/orm/orm-query.c
 
 # All source files (Phase 1 through Phase 6)
-LIB_SRCS := $(CORE_SRCS) $(TYPES_SRCS) $(SCHEMA_SRCS) $(DIALECT_SRCS) $(SQLITE_DIALECT_SRCS) $(POSTGRES_DIALECT_SRCS) $(MYSQL_DIALECT_SRCS) $(DRIVER_SRCS) $(SQLITE_DRIVER_SRCS) $(POSTGRES_DRIVER_SRCS) $(MYSQL_DRIVER_SRCS) $(INSPECT_SRCS) $(SQLITE_INSPECT_SRCS) $(POSTGRES_INSPECT_SRCS) $(MYSQL_INSPECT_SRCS) $(SQL_SRCS) $(ENGINE_SRCS) $(ORM_SRCS) $(EXPORT_SRCS)
+LIB_SRCS := $(CORE_SRCS) $(TYPES_SRCS) $(SCHEMA_SRCS) $(DIALECT_SRCS) $(SQLITE_DIALECT_SRCS) $(POSTGRES_DIALECT_SRCS) $(MYSQL_DIALECT_SRCS) $(DRIVER_SRCS) $(SQLITE_DRIVER_SRCS) $(POSTGRES_DRIVER_SRCS) $(MYSQL_DRIVER_SRCS) $(INSPECT_SRCS) $(SQLITE_INSPECT_SRCS) $(POSTGRES_INSPECT_SRCS) $(MYSQL_INSPECT_SRCS) $(SQL_SRCS) $(ENGINE_SRCS) $(MIGRATION_SRCS) $(ORM_SRCS) $(EXPORT_SRCS)
 
 # Object files
 LIB_OBJS := $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(LIB_SRCS))
@@ -287,11 +290,13 @@ ifeq ($(ENABLE_SQLITE),1)
 SQLITE_EXAMPLE_SRCS := \
 	examples/sqlite/basic-crud.c \
 	examples/sqlite/query-builder.c \
-	examples/sqlite/relationships.c
+	examples/sqlite/relationships.c \
+	examples/sqlite/migrations.c
 SQLITE_EXAMPLE_BINS := \
 	$(EXAMPLE_DIR)/sqlite-basic-crud \
 	$(EXAMPLE_DIR)/sqlite-query-builder \
-	$(EXAMPLE_DIR)/sqlite-relationships
+	$(EXAMPLE_DIR)/sqlite-relationships \
+	$(EXAMPLE_DIR)/sqlite-migrations
 else
 SQLITE_EXAMPLE_SRCS :=
 SQLITE_EXAMPLE_BINS :=

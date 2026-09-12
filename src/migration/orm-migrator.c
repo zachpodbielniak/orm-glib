@@ -26,29 +26,40 @@
 #include "../engine/orm-engine-private.h"
 #include "../core/orm-error.h"
 
+/*
+ * PostgreSQL advisory-lock keys: ASCII 'ormg' and 'migr' as int32.
+ * Session-scoped so COMMIT between migrations does not drop the lock.
+ */
+#define ORM_MIGRATOR_PG_LOCK_KEY1   1869770087
+#define ORM_MIGRATOR_PG_LOCK_KEY2   1835624306
+#define ORM_MIGRATOR_SQLITE_BUSY_MS 30000
+
 struct _OrmMigration
 {
-    gint64 version;
-    gchar *name;
-    gchar *up;
-    gchar *down;
-    gchar *checksum;
-    OrmMigrationFunc up_func;
-    OrmMigrationFunc down_func;
+    gint64            version;
+    gchar            *name;
+    gchar            *up;
+    gchar            *down;
+    gchar            *checksum;
+    OrmMigrationFunc  up_func;
+    OrmMigrationFunc  down_func;
 };
 
 G_DEFINE_BOXED_TYPE (OrmMigration, orm_migration,
                      orm_migration_copy, orm_migration_free)
 
 OrmMigration *
-orm_migration_new (gint64 version, const gchar *name,
-                   const gchar *up, const gchar *down)
+orm_migration_new (gint64       version,
+                   const gchar *name,
+                   const gchar *up,
+                   const gchar *down)
 {
     OrmMigration *self;
 
     g_return_val_if_fail (version > 0, NULL);
     g_return_val_if_fail (name != NULL && *name != '\0', NULL);
     g_return_val_if_fail (up != NULL && *up != '\0', NULL);
+
     self = g_new0 (OrmMigration, 1);
     self->version = version;
     self->name = g_strdup (name);
@@ -59,13 +70,16 @@ orm_migration_new (gint64 version, const gchar *name,
 }
 
 OrmMigration *
-orm_migration_new_callback (gint64 version, const gchar *name,
-                            const gchar *up_text, OrmMigrationFunc up,
-                            OrmMigrationFunc down)
+orm_migration_new_callback (gint64            version,
+                            const gchar      *name,
+                            const gchar      *up_text,
+                            OrmMigrationFunc  up,
+                            OrmMigrationFunc  down)
 {
     OrmMigration *self;
 
     g_return_val_if_fail (up != NULL, NULL);
+
     self = orm_migration_new (version, name, up_text, NULL);
     if (self != NULL)
     {
@@ -81,6 +95,7 @@ orm_migration_copy (const OrmMigration *self)
     OrmMigration *copy;
 
     g_return_val_if_fail (self != NULL, NULL);
+
     copy = orm_migration_new (self->version, self->name, self->up, self->down);
     copy->up_func = self->up_func;
     copy->down_func = self->down_func;
@@ -92,6 +107,7 @@ orm_migration_free (OrmMigration *self)
 {
     if (self == NULL)
         return;
+
     g_free (self->name);
     g_free (self->up);
     g_free (self->down);
@@ -113,19 +129,33 @@ orm_migration_get_name (const OrmMigration *self)
     return self->name;
 }
 
+const gchar *
+orm_migration_get_checksum (const OrmMigration *self)
+{
+    g_return_val_if_fail (self != NULL, NULL);
+    return self->checksum;
+}
+
 struct _OrmMigrator
 {
     GObject parent_instance;
+
     OrmConnection *connection;
-    OrmDialect *dialect;
-    GPtrArray *migrations;
-    gboolean running;
+    OrmDialect    *dialect;
+    GPtrArray     *migrations;
+    gint           running;
 };
 
-G_DEFINE_TYPE (OrmMigrator, orm_migrator, G_TYPE_OBJECT)
+enum
+{
+    SIGNAL_MIGRATION_APPLIED,
+    SIGNAL_MIGRATION_FAILED,
+    N_SIGNALS
+};
 
-static guint applied_signal;
-static guint failed_signal;
+static guint signals[N_SIGNALS];
+
+G_DEFINE_FINAL_TYPE (OrmMigrator, orm_migrator, G_TYPE_OBJECT)
 
 static void
 orm_migrator_finalize (GObject *object)
@@ -134,48 +164,85 @@ orm_migrator_finalize (GObject *object)
 
     g_clear_object (&self->connection);
     g_clear_object (&self->dialect);
-    g_ptr_array_unref (self->migrations);
+    g_clear_pointer (&self->migrations, g_ptr_array_unref);
     G_OBJECT_CLASS (orm_migrator_parent_class)->finalize (object);
 }
 
 static void
 orm_migrator_class_init (OrmMigratorClass *klass)
 {
-    G_OBJECT_CLASS (klass)->finalize = orm_migrator_finalize;
-    applied_signal = g_signal_new ("migration-applied", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 2,
-        ORM_TYPE_MIGRATION, G_TYPE_BOOLEAN);
-    failed_signal = g_signal_new ("migration-failed", G_TYPE_FROM_CLASS (klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 2,
-        ORM_TYPE_MIGRATION, G_TYPE_ERROR);
+    GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+    object_class->finalize = orm_migrator_finalize;
+
+    /**
+     * OrmMigrator::migration-applied:
+     * @self: The #OrmMigrator
+     * @migration: The #OrmMigration that was committed
+     * @down: %TRUE if this was a down step
+     *
+     * Emitted on the calling thread after each committed step.
+     */
+    signals[SIGNAL_MIGRATION_APPLIED] =
+        g_signal_new ("migration-applied",
+                      G_TYPE_FROM_CLASS (klass),
+                      G_SIGNAL_RUN_LAST,
+                      0, NULL, NULL, NULL,
+                      G_TYPE_NONE, 2,
+                      ORM_TYPE_MIGRATION,
+                      G_TYPE_BOOLEAN);
+
+    /**
+     * OrmMigrator::migration-failed:
+     * @self: The #OrmMigrator
+     * @migration: The #OrmMigration that failed
+     * @error: The #GError from the step
+     *
+     * Emitted on the calling thread after a step fails and rollback is
+     * attempted. Validation and lock errors do not identify a step and
+     * do not emit this signal.
+     */
+    signals[SIGNAL_MIGRATION_FAILED] =
+        g_signal_new ("migration-failed",
+                      G_TYPE_FROM_CLASS (klass),
+                      G_SIGNAL_RUN_LAST,
+                      0, NULL, NULL, NULL,
+                      G_TYPE_NONE, 2,
+                      ORM_TYPE_MIGRATION,
+                      G_TYPE_ERROR);
 }
 
 static void
 orm_migrator_init (OrmMigrator *self)
 {
-    self->migrations = g_ptr_array_new_with_free_func ((GDestroyNotify) orm_migration_free);
+    self->migrations = g_ptr_array_new_with_free_func (
+        (GDestroyNotify) orm_migration_free);
 }
 
 OrmMigrator *
-orm_migrator_new (OrmConnection *connection,
+orm_migrator_new (OrmConnection        *connection,
                   OrmMigration * const *migrations,
-                  guint n_migrations, GError **error)
+                  guint                 n_migrations,
+                  GError              **error)
 {
     OrmMigrator *self;
-    guint i;
+    guint        i;
 
     g_return_val_if_fail (ORM_IS_CONNECTION (connection), NULL);
     g_return_val_if_fail (migrations != NULL || n_migrations == 0, NULL);
+    g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
     for (i = 0; i < n_migrations; i++)
     {
-        if (migrations[i] == NULL || (i > 0 &&
-            migrations[i]->version <= migrations[i - 1]->version))
+        if (migrations[i] == NULL ||
+            (i > 0 && migrations[i]->version <= migrations[i - 1]->version))
         {
             g_set_error_literal (error, ORM_ERROR, ORM_ERROR_INVALID_OPERATION,
                                  "Migrations must have strictly increasing versions");
             return NULL;
         }
     }
+
     self = g_object_new (ORM_TYPE_MIGRATOR, NULL);
     self->connection = g_object_ref (connection);
     self->dialect = g_object_ref (orm_engine_get_dialect (
@@ -185,9 +252,13 @@ orm_migrator_new (OrmConnection *connection,
     return self;
 }
 
-/* MySQL exposes TEXT through the existing driver's blob value path. */
+/*
+ * MySQL exposes TEXT through the existing driver's blob value path.
+ */
 static gboolean
-text_matches (OrmRow *row, gint column, const gchar *expected)
+text_matches (OrmRow     *row,
+              gint        column,
+              const gchar *expected)
 {
     OrmValue *value = orm_row_get_value (row, column);
 
@@ -203,25 +274,32 @@ text_matches (OrmRow *row, gint column, const gchar *expected)
     return FALSE;
 }
 
-/* Validate the entire history, including versions beyond an up target. A
- * history must be a prefix: missing definitions are never treated as pending. */
+/*
+ * Validate the entire history, including versions beyond an up target.
+ * A history must be a prefix: missing definitions are never pending.
+ */
 static gboolean
-read_history (OrmMigrator *self, guint *count, GError **error)
+read_history (OrmMigrator  *self,
+              guint        *count,
+              GError      **error)
 {
     g_autoptr(OrmResult) result = NULL;
 
     *count = 0;
     result = orm_connection_query (self->connection,
-        "SELECT version, name, checksum FROM schema_migrations ORDER BY version", error);
+        "SELECT version, name, checksum FROM schema_migrations ORDER BY version",
+        error);
     if (result == NULL)
         return FALSE;
+
     while (orm_result_next (result))
     {
-        OrmRow *row = orm_result_get_row (result);
+        OrmRow       *row = orm_result_get_row (result);
         OrmMigration *migration = *count < self->migrations->len ?
             g_ptr_array_index (self->migrations, *count) : NULL;
 
-        if (migration == NULL || migration->version != orm_row_get_integer (row, 0) ||
+        if (migration == NULL ||
+            migration->version != orm_row_get_integer (row, 0) ||
             !text_matches (row, 1, migration->name) ||
             !text_matches (row, 2, migration->checksum))
         {
@@ -232,6 +310,7 @@ read_history (OrmMigrator *self, guint *count, GError **error)
         }
         (*count)++;
     }
+
     if (orm_result_get_error (result) != NULL)
     {
         g_propagate_error (error, g_error_copy (orm_result_get_error (result)));
@@ -241,17 +320,20 @@ read_history (OrmMigrator *self, guint *count, GError **error)
 }
 
 static gboolean
-record_migration (OrmMigrator *self, OrmMigration *migration,
-                  gboolean down, GError **error)
+record_migration (OrmMigrator  *self,
+                  OrmMigration *migration,
+                  gboolean      down,
+                  GError      **error)
 {
     g_autoptr(OrmValue) version = orm_value_new_integer (migration->version);
     g_autoptr(OrmValue) name = orm_value_new_string (migration->name);
     g_autoptr(OrmValue) checksum = orm_value_new_string (migration->checksum);
-    GList *params = NULL;
-    const gchar *sql;
-    gboolean postgres = orm_dialect_get_dialect_type (self->dialect) == ORM_DIALECT_POSTGRES;
-    gboolean ok;
+    GList              *params = NULL;
+    const gchar        *sql;
+    gboolean            postgres;
+    gboolean            ok;
 
+    postgres = orm_dialect_get_dialect_type (self->dialect) == ORM_DIALECT_POSTGRES;
     params = g_list_append (params, version);
     if (down)
         sql = postgres ? "DELETE FROM schema_migrations WHERE version = $1" :
@@ -271,8 +353,14 @@ record_migration (OrmMigrator *self, OrmMigration *migration,
     return ok;
 }
 
+/*
+ * SQLite needs BEGIN IMMEDIATE so the write reservation is taken before
+ * history is read. MySQL DDL cannot run inside a transaction.
+ */
 static gboolean
-begin_migration (OrmMigrator *self, OrmDialectType type, GError **error)
+begin_migration (OrmMigrator    *self,
+                 OrmDialectType  type,
+                 GError        **error)
 {
     if (type == ORM_DIALECT_MYSQL)
         return TRUE;
@@ -284,47 +372,57 @@ begin_migration (OrmMigrator *self, OrmDialectType type, GError **error)
 }
 
 static gboolean
-end_migration (OrmMigrator *self, OrmDialectType type,
-               gboolean commit, GError **error)
+end_migration (OrmMigrator    *self,
+               OrmDialectType  type,
+               gboolean        commit,
+               GError        **error)
 {
     gboolean ok;
 
     if (type == ORM_DIALECT_MYSQL)
         return TRUE;
-    ok = orm_connection_execute (self->connection, commit ? "COMMIT" : "ROLLBACK", error);
+    ok = orm_connection_execute (self->connection,
+                                 commit ? "COMMIT" : "ROLLBACK", error);
     if (ok)
         orm_connection_set_in_transaction (self->connection, FALSE);
     return ok;
 }
 
 static gboolean
-run (OrmMigrator *self, gint64 target, gint direction,
-     GArray **applied, GArray **pending, GError **error)
+run (OrmMigrator  *self,
+     gint64        target,
+     gint          direction,
+     GArray      **applied,
+     GArray      **pending,
+     GError      **error)
 {
-    g_autoptr(GError) local_error = NULL;
+    g_autoptr(GError)        local_error = NULL;
     g_autoptr(OrmConnection) locker = NULL;
-    g_autofree gchar *restore_timeout = NULL;
-    OrmDialectType type;
-    OrmMigration *migration = NULL;
-    guint limit = 0;
-    guint count = 0;
-    guint i;
-    gboolean locked = FALSE;
-    gboolean transaction = FALSE;
-    gboolean ok = FALSE;
+    g_autofree gchar        *restore_timeout = NULL;
+    OrmDialectType           type;
+    OrmMigration            *migration = NULL;
+    guint                    limit = 0;
+    guint                    count = 0;
+    guint                    i;
+    gboolean                 locked = FALSE;
+    gboolean                 transaction = FALSE;
+    gboolean                 ok = FALSE;
 
     g_return_val_if_fail (ORM_IS_MIGRATOR (self), FALSE);
     g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
-    if (self->running || !orm_connection_is_open (self->connection) ||
+
+    if (!orm_connection_is_open (self->connection) ||
         orm_connection_in_transaction (self->connection))
     {
         g_set_error_literal (error, ORM_ERROR, ORM_ERROR_INVALID_OPERATION,
                              "Migrator requires an idle, open connection without a transaction");
         return FALSE;
     }
+
     for (i = 0; i < self->migrations->len; i++)
     {
         OrmMigration *item = g_ptr_array_index (self->migrations, i);
+
         if (item->version == target)
             limit = i + 1;
     }
@@ -336,22 +434,37 @@ run (OrmMigrator *self, gint64 target, gint direction,
     }
     if (target == 0 && direction > 0)
         limit = self->migrations->len;
-    self->running = TRUE;
+
+    if (!g_atomic_int_compare_and_exchange (&self->running, 0, 1))
+    {
+        g_set_error_literal (error, ORM_ERROR, ORM_ERROR_INVALID_OPERATION,
+                             "Migrator requires an idle, open connection without a transaction");
+        return FALSE;
+    }
+
     type = orm_dialect_get_dialect_type (self->dialect);
     if (type == ORM_DIALECT_POSTGRES)
     {
-        /* Session lock survives the commit between migrations. */
-        if (!orm_connection_execute (self->connection,
-                "SELECT pg_advisory_lock(1869770087, 1835624306)", &local_error))
+        g_autofree gchar *lock_sql = g_strdup_printf (
+            "SELECT pg_advisory_lock(%d, %d)",
+            ORM_MIGRATOR_PG_LOCK_KEY1, ORM_MIGRATOR_PG_LOCK_KEY2);
+
+        if (!orm_connection_execute (self->connection, lock_sql, &local_error))
             goto out;
         locked = TRUE;
     }
     else if (type == ORM_DIALECT_MYSQL)
     {
-        /* DDL on the working connection must not release this table lock. */
-        locker = orm_engine_connect (orm_connection_get_engine (self->connection), &local_error);
-        if (locker == NULL || !orm_connection_execute (locker,
-                "CREATE TABLE IF NOT EXISTS schema_migrations_lock (id INTEGER)", &local_error) ||
+        /*
+         * DDL on the working connection must not release this table lock,
+         * so a second session holds LOCK TABLES for the whole call.
+         */
+        locker = orm_engine_connect (orm_connection_get_engine (self->connection),
+                                     &local_error);
+        if (locker == NULL ||
+            !orm_connection_execute (locker,
+                "CREATE TABLE IF NOT EXISTS schema_migrations_lock (id INTEGER)",
+                &local_error) ||
             !orm_connection_execute (locker,
                 "LOCK TABLES schema_migrations_lock WRITE", &local_error))
             goto out;
@@ -361,7 +474,7 @@ run (OrmMigrator *self, gint64 target, gint direction,
     {
         g_autoptr(OrmResult) result = orm_connection_query (
             self->connection, "PRAGMA busy_timeout", &local_error);
-        g_autoptr(OrmValue) value = NULL;
+        g_autoptr(OrmValue)  value = NULL;
 
         if (result == NULL)
             goto out;
@@ -373,9 +486,14 @@ run (OrmMigrator *self, gint64 target, gint direction,
             goto out;
         }
         restore_timeout = g_strdup_printf ("PRAGMA busy_timeout = %" G_GINT64_FORMAT,
-                                             orm_value_get_integer (value));
-        if (!orm_connection_execute (self->connection, "PRAGMA busy_timeout = 30000", &local_error))
-            goto out;
+                                           orm_value_get_integer (value));
+        {
+            g_autofree gchar *busy_sql = g_strdup_printf (
+                "PRAGMA busy_timeout = %d", ORM_MIGRATOR_SQLITE_BUSY_MS);
+
+            if (!orm_connection_execute (self->connection, busy_sql, &local_error))
+                goto out;
+        }
     }
     else
     {
@@ -383,20 +501,23 @@ run (OrmMigrator *self, gint64 target, gint direction,
                              "Migration locking is unsupported for this dialect");
         goto out;
     }
+
     if (!begin_migration (self, type, &local_error))
         goto out;
     transaction = type != ORM_DIALECT_MYSQL;
     if (!orm_connection_execute (self->connection,
             "CREATE TABLE IF NOT EXISTS schema_migrations ("
             "version BIGINT PRIMARY KEY, name TEXT NOT NULL, "
-            "checksum VARCHAR(64) NOT NULL, applied_at TIMESTAMP NOT NULL)", &local_error) ||
+            "checksum VARCHAR(64) NOT NULL, applied_at TIMESTAMP NOT NULL)",
+            &local_error) ||
         !end_migration (self, type, TRUE, &local_error))
         goto out;
     transaction = FALSE;
+
     for (;;)
     {
         OrmMigrationFunc func;
-        const gchar *sql;
+        const gchar     *sql;
 
         if (!begin_migration (self, type, &local_error))
             goto out;
@@ -410,13 +531,16 @@ run (OrmMigrator *self, gint64 target, gint direction,
             transaction = FALSE;
             break;
         }
-        migration = g_ptr_array_index (self->migrations, direction > 0 ? count : count - 1);
+
+        migration = g_ptr_array_index (self->migrations,
+                                       direction > 0 ? count : count - 1);
         func = direction > 0 ? migration->up_func : migration->down_func;
         sql = direction > 0 ? migration->up : migration->down;
         if (func == NULL && sql == NULL)
         {
             g_set_error (&local_error, ORM_ERROR, ORM_ERROR_NOT_SUPPORTED,
-                         "Migration %" G_GINT64_FORMAT " has no down operation", migration->version);
+                         "Migration %" G_GINT64_FORMAT " has no down operation",
+                         migration->version);
             goto out;
         }
         if (!(func != NULL ? func (self->connection, self->dialect, &local_error) :
@@ -425,18 +549,23 @@ run (OrmMigrator *self, gint64 target, gint direction,
             !end_migration (self, type, TRUE, &local_error))
             goto out;
         transaction = FALSE;
-        g_signal_emit (self, applied_signal, 0, migration, direction < 0);
+        g_signal_emit (self, signals[SIGNAL_MIGRATION_APPLIED], 0,
+                       migration, direction < 0);
         migration = NULL;
     }
     ok = TRUE;
+
 out:
     if (transaction && !end_migration (self, type, FALSE, NULL))
         orm_connection_close (self->connection);
     if (locked && type == ORM_DIALECT_POSTGRES)
     {
         g_autoptr(GError) unlock_error = NULL;
-        if (!orm_connection_execute (self->connection,
-                "SELECT pg_advisory_unlock(1869770087, 1835624306)", &unlock_error))
+        g_autofree gchar *unlock_sql = g_strdup_printf (
+            "SELECT pg_advisory_unlock(%d, %d)",
+            ORM_MIGRATOR_PG_LOCK_KEY1, ORM_MIGRATOR_PG_LOCK_KEY2);
+
+        if (!orm_connection_execute (self->connection, unlock_sql, &unlock_error))
         {
             orm_connection_close (self->connection);
             if (local_error == NULL)
@@ -450,6 +579,7 @@ out:
     if (restore_timeout != NULL && orm_connection_is_open (self->connection))
     {
         g_autoptr(GError) restore_error = NULL;
+
         if (!orm_connection_execute (self->connection, restore_timeout, &restore_error))
         {
             if (local_error == NULL)
@@ -463,7 +593,8 @@ out:
             g_set_error_literal (&local_error, ORM_ERROR, ORM_ERROR_EXECUTE,
                                  "Migration callback failed without an error");
         if (migration != NULL)
-            g_signal_emit (self, failed_signal, 0, migration, local_error);
+            g_signal_emit (self, signals[SIGNAL_MIGRATION_FAILED], 0,
+                           migration, local_error);
         g_propagate_error (error, g_steal_pointer (&local_error));
     }
     else if (direction == 0)
@@ -473,16 +604,19 @@ out:
         for (i = 0; i < self->migrations->len; i++)
         {
             OrmMigration *item = g_ptr_array_index (self->migrations, i);
+
             g_array_append_val (i < count ? *applied : *pending, item->version);
         }
     }
-    self->running = FALSE;
+    g_atomic_int_set (&self->running, 0);
     return ok;
 }
 
 gboolean
-orm_migrator_status (OrmMigrator *self, GArray **applied,
-                     GArray **pending, GError **error)
+orm_migrator_status (OrmMigrator  *self,
+                     GArray      **applied,
+                     GArray      **pending,
+                     GError      **error)
 {
     g_return_val_if_fail (applied != NULL && pending != NULL, FALSE);
     *applied = NULL;
@@ -491,13 +625,17 @@ orm_migrator_status (OrmMigrator *self, GArray **applied,
 }
 
 gboolean
-orm_migrator_up (OrmMigrator *self, gint64 target, GError **error)
+orm_migrator_up (OrmMigrator  *self,
+                 gint64        target,
+                 GError      **error)
 {
     return run (self, target, 1, NULL, NULL, error);
 }
 
 gboolean
-orm_migrator_down (OrmMigrator *self, gint64 target, GError **error)
+orm_migrator_down (OrmMigrator  *self,
+                   gint64        target,
+                   GError      **error)
 {
     return run (self, target, -1, NULL, NULL, error);
 }

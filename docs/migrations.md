@@ -55,7 +55,8 @@ step fails. A missing down operation is an error when that step is reached.
 versions, applied and pending. Status initializes bookkeeping but executes no
 migration. Unknown applied versions, gaps in history, changed names, and changed
 SHA-256 checksums are errors, including when the changed version exceeds the
-requested target. Never edit an applied migration; append another one.
+requested target. `orm_migration_get_checksum()` returns that hash. Never
+edit an applied migration; append another one.
 
 ## Callbacks, transactions, and locking
 

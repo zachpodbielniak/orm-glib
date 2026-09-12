@@ -101,6 +101,7 @@ src/
 ├── types/          # SQL type system (OrmSqlType hierarchy)
 ├── schema/         # Schema definitions (OrmTable, OrmColumn)
 ├── engine/         # Database connections (OrmEngine, OrmConnection)
+├── migration/      # Explicit versioned schema runner (OrmMigrator)
 ├── dialect/        # Database-specific implementations
 ├── sql/            # SQL expression language
 ├── orm/            # ORM layer (OrmSession, OrmMapper)
@@ -151,6 +152,10 @@ src/
 - [x] `OrmRowStream` for incremental row delivery
 - [x] `OrmConnection` "state-changed" and "notice" signals
 
+### Phase 9 (Complete)
+- [x] Explicit versioned migrations (`OrmMigration` / `OrmMigrator`)
+- [x] Per-step transactions, checksummed history, cooperative locking
+
 ### Not implemented yet
 
 These are the gaps a caller notices, listed so nobody goes looking for an
@@ -171,7 +176,9 @@ API that is not there:
   connection, and `orm_engine_execute()` opens and closes one per call.
   One connection means one worker thread, so parallelism means opening
   more connections yourself -- see `docs/async.md`.
-- **Migrations.** No versioning and no `ALTER TABLE` in the DDL compiler.
+- **Automatic schema diffs.** `OrmMigrator` runs explicit SQL or callback
+  steps you write. There is no model-diff generator, and the DDL compiler
+  still has no `ALTER TABLE`.
 - **Text serialization of objects.** `OrmSerializable` means
   object-to-row, not object-to-JSON. Result sets *can* be written out --
   see `src/export/` and `docs/export.md` for the `OrmExporter` family

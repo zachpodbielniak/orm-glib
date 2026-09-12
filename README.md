@@ -14,6 +14,7 @@ orm-glib provides an Object-Relational Mapping layer for GLib-based applications
 - **Expression Language**: Build type-safe SQL queries programmatically
 - **Session Management**: Unit of Work pattern with identity mapping
 - **Multiple Dialects**: Support for SQLite, PostgreSQL, and MySQL
+- **Migrations**: Explicit, versioned schema changes with checksummed history
 
 ## Requirements
 

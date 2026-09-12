@@ -35,10 +35,10 @@
 G_BEGIN_DECLS
 
 /*
- * Shared between the engine-layer translation units and nothing else.
+ * Shared between the engine-layer translation units and OrmMigrator.
  * These are not installed and carry no API stability promise; they exist
- * so OrmConnection, OrmResult and OrmTransaction can cooperate without
- * exposing the driver plumbing to callers.
+ * so OrmConnection, OrmResult, OrmTransaction and OrmMigrator can
+ * cooperate without exposing the driver plumbing to callers.
  */
 
 G_GNUC_INTERNAL

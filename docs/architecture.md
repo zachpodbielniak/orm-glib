@@ -23,6 +23,9 @@ orm-glib is organized into several layers, each with distinct responsibilities:
 │                      Engine Layer                           │
 │  (OrmEngine, OrmConnection, OrmTransaction, OrmResult)      │
 ├─────────────────────────────────────────────────────────────┤
+│                    Migration Layer                          │
+│  (OrmMigration, OrmMigrator)                                │
+├─────────────────────────────────────────────────────────────┤
 │                      Core Layer                             │
 │  (OrmValue, OrmError, OrmEnums, SQL Types)                  │
 └─────────────────────────────────────────────────────────────┘
@@ -112,6 +115,15 @@ while ((row = orm_result_fetch_row (result)) != NULL)
     g_object_unref (row);
 }
 ```
+
+## Migration Layer
+
+`OrmMigration` is a boxed value: either one SQL statement per direction or a
+callback that receives the idle connection and dialect. `OrmMigrator` copies
+the list, retains the connection, and runs steps only when
+`orm_migrator_up()` / `orm_migrator_down()` are called. History lives in
+`schema_migrations` with a SHA-256 checksum of the up text. See
+[migrations.md](migrations.md).
 
 ## Dialect Layer
 
