@@ -107,6 +107,7 @@
 #include "engine/orm-row-stream.h"
 #include "engine/orm-connection.h"
 #include "engine/orm-transaction.h"
+#include "migration/orm-migrator.h"
 #include "engine/orm-engine.h"
 
 /* Inspection */

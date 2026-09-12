@@ -29,6 +29,7 @@ SCHEMA_SRCS := \
 
 # Engine layer
 ENGINE_SRCS := \
+	src/migration/orm-migrator.c \
 	src/engine/orm-engine.c \
 	src/engine/orm-connection.c \
 	src/engine/orm-transaction.c \
@@ -158,6 +159,7 @@ LIB_OBJS := $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(LIB_SRCS))
 
 # Base header files for installation
 PUBLIC_HEADERS_BASE := \
+	src/migration/orm-migrator.h \
 	src/orm.h \
 	src/orm-version.h \
 	src/core/orm-types.h \
@@ -253,6 +255,7 @@ TEST_FIXTURE_SRCS := \
 
 # Test sources (excluding fixtures)
 TEST_SRCS := \
+	tests/test-migration.c \
 	tests/test-value.c \
 	tests/test-types.c \
 	tests/test-enums.c \

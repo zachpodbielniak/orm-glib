@@ -76,6 +76,7 @@ install: lib
 	install -d $(DESTDIR)$(INCLUDEDIR)/core
 	install -d $(DESTDIR)$(INCLUDEDIR)/types
 	install -d $(DESTDIR)$(INCLUDEDIR)/schema
+	install -d $(DESTDIR)$(INCLUDEDIR)/migration
 	install -d $(DESTDIR)$(PKGCONFIGDIR)
 ifeq ($(BUILD_SHARED),1)
 	install -m 755 $(BUILD_DIR)/$(LIB_SHARED) $(DESTDIR)$(LIBDIR)/
@@ -89,6 +90,7 @@ endif
 	install -m 644 src/core/*.h $(DESTDIR)$(INCLUDEDIR)/core/
 	install -m 644 src/types/*.h $(DESTDIR)$(INCLUDEDIR)/types/
 	install -m 644 src/schema/*.h $(DESTDIR)$(INCLUDEDIR)/schema/
+	install -m 644 src/migration/*.h $(DESTDIR)$(INCLUDEDIR)/migration/
 	sed -e 's,@prefix@,$(PREFIX),' \
 	    -e 's,@libdir@,$(LIBDIR),' \
 	    -e 's,@includedir@,$(INCLUDEDIR),' \

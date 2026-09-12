@@ -41,6 +41,7 @@ GList *users = orm_query_all (query, &error);
 
 - [Getting Started](getting-started.md) - Installation and first steps
 - [Architecture](architecture.md) - Library design and components
+- [Migrations](migrations.md) - Versioned schema changes and rollback
 - [Dialects](dialects.md) - Database-specific SQL and type mapping
 - [Drivers](drivers.md) - Backend I/O, the scheme registry, and adding a database
 - [Export](export.md) - Writing a result set out as CSV or JSON
