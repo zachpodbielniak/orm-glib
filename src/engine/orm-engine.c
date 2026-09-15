@@ -625,8 +625,8 @@ orm_engine_connect_thread (GTask        *task,
  * orm_engine_connect_async:
  * @self: An #OrmEngine
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the connection is open
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the connection is open
+ * @user_data: (nullable): Data for @callback
  *
  * Opens a connection without blocking the calling thread.
  */

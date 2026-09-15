@@ -638,8 +638,8 @@ orm_inspector_list_schemas_job (gpointer  data,
  * orm_inspector_list_schemas_async:
  * @self: An #OrmInspector
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the schemas have been read
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the schemas have been read
+ * @user_data: (nullable): Data for @callback
  *
  * Lists the schemas in the database, on the connection's worker thread.
  */
@@ -703,8 +703,8 @@ orm_inspector_list_relations_job (gpointer  data,
  * @self: An #OrmInspector
  * @schema: (nullable): The schema, or %NULL for the default
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the relations have been read
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the relations have been read
+ * @user_data: (nullable): Data for @callback
  *
  * Lists the tables and views in @schema, on the connection's worker thread.
  */
@@ -770,8 +770,8 @@ orm_inspector_get_columns_job (gpointer  data,
  * @table: The relation name
  * @schema: (nullable): The schema, or %NULL for the default
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the columns have been read
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the columns have been read
+ * @user_data: (nullable): Data for @callback
  *
  * Gets the columns of @table, on the connection's worker thread.
  */
@@ -839,8 +839,8 @@ orm_inspector_get_indexes_job (gpointer  data,
  * @table: The relation name
  * @schema: (nullable): The schema, or %NULL for the default
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the indexes have been read
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the indexes have been read
+ * @user_data: (nullable): Data for @callback
  *
  * Gets the indexes on @table, on the connection's worker thread.
  */
@@ -909,8 +909,8 @@ orm_inspector_get_foreign_keys_job (gpointer  data,
  * @table: The relation name
  * @schema: (nullable): The schema, or %NULL for the default
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the keys have been read
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the keys have been read
+ * @user_data: (nullable): Data for @callback
  *
  * Gets the foreign keys declared on @table, on the connection's worker
  * thread.
@@ -980,8 +980,8 @@ orm_inspector_get_primary_key_job (gpointer  data,
  * @table: The relation name
  * @schema: (nullable): The schema, or %NULL for the default
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the key has been read
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the key has been read
+ * @user_data: (nullable): Data for @callback
  *
  * Gets the primary-key columns of @table, on the connection's worker
  * thread.

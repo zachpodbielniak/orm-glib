@@ -1752,8 +1752,8 @@ orm_connection_close_job (gpointer  data,
  * @sql: SQL statement with placeholders
  * @params: (element-type OrmValue) (nullable) (transfer none): Parameter values
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the statement has run
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the statement has run
+ * @user_data: (nullable): Data for @callback
  *
  * Executes a statement that returns no rows, on the connection's worker
  * thread.  @params is copied before this returns, so the caller may free
@@ -1808,8 +1808,8 @@ orm_connection_execute_finish (OrmConnection  *self,
  * @sql: SQL query with placeholders
  * @params: (element-type OrmValue) (nullable) (transfer none): Parameter values
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the result set is ready
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the result set is ready
+ * @user_data: (nullable): Data for @callback
  *
  * Runs a query on the connection's worker thread.  @params is copied
  * before this returns, so the caller may free it immediately.
@@ -1893,8 +1893,8 @@ orm_connection_query_finish (OrmConnection  *self,
  * @sql: SQL query with placeholders
  * @params: (element-type OrmValue) (nullable) (transfer none): Parameter values
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the stream is ready
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the stream is ready
+ * @user_data: (nullable): Data for @callback
  *
  * Runs a query and hands back an #OrmRowStream that fetches rows a batch
  * at a time.  @params is copied before this returns.
@@ -1946,8 +1946,8 @@ orm_connection_query_stream_finish (OrmConnection  *self,
  * orm_connection_close_async:
  * @self: An #OrmConnection
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the connection is closed
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the connection is closed
+ * @user_data: (nullable): Data for @callback
  *
  * Closes the connection once everything queued ahead of it has run.
  *

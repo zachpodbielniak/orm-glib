@@ -45,7 +45,7 @@ examples: lib $(EXAMPLE_BINS)
 .PHONY: gir
 gir: $(BUILD_DIR)/Orm-$(API_VERSION).gir $(BUILD_DIR)/Orm-$(API_VERSION).typelib
 
-$(BUILD_DIR)/Orm-$(API_VERSION).gir: $(LIB_SRCS) $(PUBLIC_HEADERS)
+$(BUILD_DIR)/Orm-$(API_VERSION).gir: $(BUILD_DIR)/$(LIB_SHARED) $(LIB_SRCS) $(PUBLIC_HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(GIR_SCANNER) --warn-all \
 		--namespace=Orm \

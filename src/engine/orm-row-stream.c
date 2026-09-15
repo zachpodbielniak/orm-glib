@@ -340,8 +340,8 @@ orm_row_stream_fetch_job (gpointer  data,
  * @self: An #OrmRowStream
  * @n_rows: The most rows to fetch
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the batch is ready
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the batch is ready
+ * @user_data: (nullable): Data for @callback
  *
  * Fetches up to @n_rows rows on the connection's worker thread.
  */
@@ -415,8 +415,8 @@ orm_row_stream_close_job (gpointer  data,
  * orm_row_stream_close_async:
  * @self: An #OrmRowStream
  * @cancellable: (nullable): A #GCancellable
- * @callback: (scope async) (nullable): Called when the cursor is released
- * @user_data: (closure): Data for @callback
+ * @callback: (scope async) (nullable) (closure user_data): Called when the cursor is released
+ * @user_data: (nullable): Data for @callback
  *
  * Releases the backend cursor, freeing the connection for other work.
  */
