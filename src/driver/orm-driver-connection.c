@@ -73,6 +73,12 @@ orm_driver_connection_real_close (OrmDriverConnection *self)
 {
 }
 
+static gboolean
+orm_driver_connection_real_in_transaction (OrmDriverConnection *self)
+{
+    return FALSE;
+}
+
 static void
 orm_driver_connection_class_init (OrmDriverConnectionClass *klass)
 {
@@ -81,6 +87,7 @@ orm_driver_connection_class_init (OrmDriverConnectionClass *klass)
     klass->get_changes = orm_driver_connection_real_get_changes;
     klass->set_isolation_level = orm_driver_connection_real_set_isolation_level;
     klass->interrupt = orm_driver_connection_real_interrupt;
+    klass->in_transaction = orm_driver_connection_real_in_transaction;
 }
 
 static void
@@ -230,4 +237,22 @@ orm_driver_connection_interrupt (OrmDriverConnection  *self,
     g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
     return ORM_DRIVER_CONNECTION_GET_CLASS (self)->interrupt (self, error);
+}
+
+/**
+ * orm_driver_connection_in_transaction:
+ * @self: An #OrmDriverConnection
+ *
+ * Asks the backend whether a transaction is open on this session.  Unlike
+ * the bookkeeping #OrmConnection keeps, this also sees a transaction
+ * begun with raw SQL.
+ *
+ * Returns: %TRUE if a transaction is open
+ */
+gboolean
+orm_driver_connection_in_transaction (OrmDriverConnection *self)
+{
+    g_return_val_if_fail (ORM_IS_DRIVER_CONNECTION (self), FALSE);
+
+    return ORM_DRIVER_CONNECTION_GET_CLASS (self)->in_transaction (self);
 }

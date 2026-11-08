@@ -47,6 +47,8 @@ G_DECLARE_DERIVABLE_TYPE (OrmDriverConnection, orm_driver_connection, ORM, DRIVE
  * @get_changes: Rows affected by the last statement
  * @set_isolation_level: Apply a transaction isolation level
  * @interrupt: Ask the backend to abandon the statement in flight
+ * @in_transaction: Whether the session has a transaction open, by the
+ *   backend's own account
  *
  * One live connection to a database, as the backend exposes it.
  *
@@ -57,6 +59,10 @@ G_DECLARE_DERIVABLE_TYPE (OrmDriverConnection, orm_driver_connection, ORM, DRIVE
  * unimplemented rather than approximate it -- the default returns
  * %ORM_ERROR_NOT_SUPPORTED, and callers fall back to abandoning the
  * result.
+ *
+ * @in_transaction answers from the backend's state, not from what the
+ * library issued, so it also sees a BEGIN sent as raw SQL.  The default
+ * says %FALSE.
  */
 struct _OrmDriverConnectionClass
 {
@@ -80,9 +86,10 @@ struct _OrmDriverConnectionClass
                                               GError              **error);
     gboolean          (*interrupt)           (OrmDriverConnection  *self,
                                               GError              **error);
+    gboolean          (*in_transaction)      (OrmDriverConnection *self);
 
     /*< private >*/
-    gpointer _reserved[8];
+    gpointer _reserved[7];
 };
 
 /*
@@ -171,6 +178,18 @@ gboolean orm_driver_connection_set_isolation_level (OrmDriverConnection  *self,
  */
 gboolean orm_driver_connection_interrupt (OrmDriverConnection  *self,
                                           GError              **error);
+
+/*
+ * orm_driver_connection_in_transaction:
+ * @self: An #OrmDriverConnection
+ *
+ * Asks the backend whether a transaction is open on this session,
+ * however it was started.  Call it where the connection's other work
+ * runs.
+ *
+ * Returns: %TRUE if a transaction is open
+ */
+gboolean orm_driver_connection_in_transaction (OrmDriverConnection *self);
 
 G_END_DECLS
 

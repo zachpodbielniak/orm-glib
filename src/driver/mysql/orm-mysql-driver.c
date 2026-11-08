@@ -993,6 +993,23 @@ orm_mysql_driver_connection_interrupt (OrmDriverConnection  *connection,
     return FALSE;
 }
 
+/*
+ * The server reports transaction state with every OK packet, and the
+ * client keeps the last one in server_status -- so this sees a BEGIN or
+ * START TRANSACTION sent as raw SQL.  Both MySQL's client library and
+ * MariaDB Connector/C expose the field and the flag.
+ */
+static gboolean
+orm_mysql_driver_connection_in_transaction (OrmDriverConnection *connection)
+{
+    OrmMysqlDriverConnection *self = ORM_MYSQL_DRIVER_CONNECTION (connection);
+
+    if (self->conn == NULL)
+        return FALSE;
+
+    return (self->conn->server_status & SERVER_STATUS_IN_TRANS) != 0;
+}
+
 static void
 orm_mysql_driver_connection_finalize (GObject *object)
 {
@@ -1016,6 +1033,7 @@ orm_mysql_driver_connection_class_init (OrmMysqlDriverConnectionClass *klass)
     conn_class->get_changes = orm_mysql_driver_connection_get_changes;
     conn_class->set_isolation_level = orm_mysql_driver_connection_set_isolation_level;
     conn_class->interrupt = orm_mysql_driver_connection_interrupt;
+    conn_class->in_transaction = orm_mysql_driver_connection_in_transaction;
 }
 
 static void

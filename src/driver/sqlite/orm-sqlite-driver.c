@@ -29,6 +29,12 @@
 #include <string.h>
 
 /*
+ * How long a statement waits for another connection's lock before failing
+ * with "database is locked".  See orm_sqlite_driver_open().
+ */
+#define ORM_SQLITE_DEFAULT_BUSY_TIMEOUT_MS (5000)
+
+/*
  * The SQLite backend: driver, connection and result.
  *
  * All three live in one file because they are one implementation -- the
@@ -596,6 +602,21 @@ orm_sqlite_driver_connection_interrupt (OrmDriverConnection  *connection,
     return TRUE;
 }
 
+/*
+ * SQLite leaves autocommit mode for exactly as long as a transaction is
+ * open, whoever began it.
+ */
+static gboolean
+orm_sqlite_driver_connection_in_transaction (OrmDriverConnection *connection)
+{
+    OrmSqliteDriverConnection *self = ORM_SQLITE_DRIVER_CONNECTION (connection);
+
+    if (self->db == NULL)
+        return FALSE;
+
+    return sqlite3_get_autocommit (self->db) == 0;
+}
+
 static void
 orm_sqlite_driver_connection_finalize (GObject *object)
 {
@@ -619,6 +640,7 @@ orm_sqlite_driver_connection_class_init (OrmSqliteDriverConnectionClass *klass)
     conn_class->get_changes = orm_sqlite_driver_connection_get_changes;
     conn_class->set_isolation_level = orm_sqlite_driver_connection_set_isolation_level;
     conn_class->interrupt = orm_sqlite_driver_connection_interrupt;
+    conn_class->in_transaction = orm_sqlite_driver_connection_in_transaction;
 }
 
 static void
@@ -697,6 +719,17 @@ orm_sqlite_driver_open (OrmDriver  *driver,
      * every foreign key in a schema into documentation.
      */
     sqlite3_exec (db, "PRAGMA foreign_keys = ON", NULL, NULL, NULL);
+
+    /*
+     * SQLite's default is to fail at once with SQLITE_BUSY ("database is
+     * locked") whenever another connection holds a conflicting lock.  That
+     * is the wrong default for anything with more than one connection to
+     * a file -- a pool, or two threads each with their own -- because
+     * contention there is brief and expected.  Wait for a lock instead,
+     * as Python's sqlite3 module does.  "PRAGMA busy_timeout = N" (for
+     * example as a pool's init-sql) overrides it; 0 restores fail-fast.
+     */
+    sqlite3_busy_timeout (db, ORM_SQLITE_DEFAULT_BUSY_TIMEOUT_MS);
 
     self = g_object_new (ORM_TYPE_SQLITE_DRIVER_CONNECTION, NULL);
     self->db = db;

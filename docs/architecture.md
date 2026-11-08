@@ -21,7 +21,7 @@ orm-glib is organized into several layers, each with distinct responsibilities:
 │  (OrmDialect, OrmTypeCompiler, OrmDdlCompiler)              │
 ├─────────────────────────────────────────────────────────────┤
 │                      Engine Layer                           │
-│  (OrmEngine, OrmConnection, OrmTransaction, OrmResult)      │
+│  (OrmEngine, OrmConnection, OrmConnectionPool, OrmResult)   │
 ├─────────────────────────────────────────────────────────────┤
 │                    Migration Layer                          │
 │  (OrmMigration, OrmMigrator)                                │
@@ -88,6 +88,22 @@ Wraps the native database connection handle and provides a uniform interface.
 gboolean orm_connection_execute (OrmConnection *conn, const gchar *sql, GError **error);
 OrmResult *orm_connection_query (OrmConnection *conn, const gchar *sql, GError **error);
 OrmTransaction *orm_connection_begin (OrmConnection *conn, GError **error);
+```
+
+### OrmConnectionPool
+
+A bounded set of connections for one engine, lent one borrower at a time.
+Each connection still runs one statement at a time on its own worker
+thread; the pool is how an application gets several of them. Release
+rolls back abandoned transactions and restores the default isolation
+level; an idle reaper runs in the pool's `GMainContext`. See
+[connection-pool.md](connection-pool.md).
+
+```c
+OrmConnectionPool *pool = orm_connection_pool_new (engine, 8, &error);
+OrmConnection *conn = orm_connection_pool_acquire (pool, NULL, &error);
+/* ... */
+orm_connection_pool_release (pool, conn);
 ```
 
 ### OrmTransaction

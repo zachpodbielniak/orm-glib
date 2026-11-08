@@ -89,10 +89,26 @@ orm_row_stream_close_cursor (gpointer data)
     {
         orm_driver_result_close (self->driver_result);
         g_clear_object (&self->driver_result);
+
+        if (self->connection != NULL)
+            orm_connection_untrack_cursor (self->connection, self);
     }
 
     self->is_closed = TRUE;
     self->at_end = TRUE;
+}
+
+/*
+ * Called by the connection when a pool takes it back with this stream
+ * still open: the cursor is closed where the connection's work runs, and
+ * later fetches fail with "The row stream is closed".
+ */
+static void
+orm_row_stream_invalidate (gpointer data)
+{
+    OrmRowStream *self = ORM_ROW_STREAM (data);
+
+    orm_connection_run_confined (self->connection, orm_row_stream_close_cursor, self);
 }
 
 static void
@@ -105,7 +121,7 @@ orm_row_stream_finalize (GObject *object)
      * while the worker is busy would otherwise finalize a statement the
      * worker is in the middle of stepping.
      */
-    if (self->connection != NULL)
+    if (self->connection != NULL && self->driver_result != NULL)
         orm_connection_run_confined (self->connection,
                                      orm_row_stream_close_cursor, self);
     else
@@ -174,6 +190,8 @@ orm_row_stream_new_for_driver (OrmConnection   *connection,
 
         g_array_append_val (self->columns, column);
     }
+
+    orm_connection_track_cursor (connection, G_OBJECT (self), orm_row_stream_invalidate);
 
     return self;
 }

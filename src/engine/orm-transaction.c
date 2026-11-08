@@ -37,19 +37,62 @@ struct _OrmTransaction
 
     OrmConnection *connection;  /* Weak reference */
     gboolean       is_active;
+
+    /* The connection's transaction epoch when BEGIN ran */
+    gint           epoch;
 };
 
 G_DEFINE_TYPE (OrmTransaction, orm_transaction, G_TYPE_OBJECT)
 
-/* Internal function to set connection transaction state */
+/*
+ * Whether this transaction is still the one open on its connection.
+ *
+ * A pooled connection that is handed back with a transaction open has
+ * that transaction rolled back by the pool, and may then be lent to
+ * somebody else.  The OrmTransaction for it can outlive all of that, and
+ * left alone it would run COMMIT or ROLLBACK -- or, on finalize, an
+ * automatic ROLLBACK -- against the next borrower's work.  The epoch the
+ * connection bumps on that rollback is how it notices.
+ *
+ * Returns: %TRUE if the transaction may still act on its connection
+ */
+static gboolean
+orm_transaction_is_current (OrmTransaction *self)
+{
+    if (self->connection == NULL)
+        return FALSE;
+
+    return orm_connection_get_transaction_epoch (self->connection) == self->epoch;
+}
+
+/*
+ * The guard every operation runs before touching the connection: a stale
+ * transaction is marked inactive and fails with an error saying why.
+ */
+static gboolean
+orm_transaction_check_current (OrmTransaction  *self,
+                               GError         **error)
+{
+    if (orm_transaction_is_current (self))
+        return TRUE;
+
+    self->is_active = FALSE;
+    g_set_error (error, ORM_ERROR, ORM_ERROR_TRANSACTION_FAILED,
+                 "Transaction is no longer open: its connection was "
+                 "returned to a pool, which rolled it back");
+    return FALSE;
+}
 
 static void
 orm_transaction_finalize (GObject *object)
 {
     OrmTransaction *self = ORM_TRANSACTION (object);
 
-    /* Auto-rollback if not committed */
-    if (self->is_active && self->connection != NULL)
+    /*
+     * Auto-rollback if not committed -- unless the connection has moved on
+     * to another borrower, in which case it is not ours to roll back.
+     */
+    if (self->is_active && orm_transaction_is_current (self))
     {
         g_warning ("Transaction destroyed without commit/rollback, rolling back");
         orm_transaction_rollback (self, NULL);
@@ -101,6 +144,7 @@ orm_transaction_new (OrmConnection  *connection,
     self = g_object_new (ORM_TYPE_TRANSACTION, NULL);
     self->connection = connection;  /* Weak reference */
     self->is_active = TRUE;
+    self->epoch = orm_connection_get_transaction_epoch (connection);
 
     orm_connection_set_in_transaction (connection, TRUE);
 
@@ -123,6 +167,9 @@ orm_transaction_commit (OrmTransaction  *self,
     g_return_val_if_fail (ORM_IS_TRANSACTION (self), FALSE);
     g_return_val_if_fail (self->is_active, FALSE);
     g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+    if (!orm_transaction_check_current (self, error))
+        return FALSE;
 
     if (!orm_connection_execute (self->connection, "COMMIT", error))
     {
@@ -150,6 +197,9 @@ orm_transaction_rollback (OrmTransaction  *self,
 {
     g_return_val_if_fail (ORM_IS_TRANSACTION (self), FALSE);
     g_return_val_if_fail (self->is_active, FALSE);
+
+    if (!orm_transaction_check_current (self, error))
+        return FALSE;
 
     if (!orm_connection_execute (self->connection, "ROLLBACK", error))
     {
@@ -187,6 +237,9 @@ orm_transaction_savepoint (OrmTransaction  *self,
     g_return_val_if_fail (name != NULL, FALSE);
     g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
+    if (!orm_transaction_check_current (self, error))
+        return FALSE;
+
     sql = g_strdup_printf ("SAVEPOINT \"%s\"", name);
 
     return orm_connection_execute (self->connection, sql, error);
@@ -213,6 +266,9 @@ orm_transaction_release_savepoint (OrmTransaction  *self,
     g_return_val_if_fail (self->is_active, FALSE);
     g_return_val_if_fail (name != NULL, FALSE);
     g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+    if (!orm_transaction_check_current (self, error))
+        return FALSE;
 
     sql = g_strdup_printf ("RELEASE SAVEPOINT \"%s\"", name);
 
@@ -241,6 +297,9 @@ orm_transaction_rollback_to_savepoint (OrmTransaction  *self,
     g_return_val_if_fail (name != NULL, FALSE);
     g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
+    if (!orm_transaction_check_current (self, error))
+        return FALSE;
+
     sql = g_strdup_printf ("ROLLBACK TO SAVEPOINT \"%s\"", name);
 
     return orm_connection_execute (self->connection, sql, error);
@@ -258,7 +317,7 @@ gboolean
 orm_transaction_is_active (OrmTransaction *self)
 {
     g_return_val_if_fail (ORM_IS_TRANSACTION (self), FALSE);
-    return self->is_active;
+    return self->is_active && orm_transaction_is_current (self);
 }
 
 /**

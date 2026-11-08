@@ -83,6 +83,47 @@ void orm_connection_set_in_transaction (OrmConnection *self,
                                         gboolean       in_transaction);
 
 G_GNUC_INTERNAL
+gint orm_connection_get_transaction_epoch (OrmConnection *self);
+
+G_GNUC_INTERNAL
+gboolean orm_connection_reset_for_reuse (OrmConnection  *self,
+                                         GError        **error);
+
+/*
+ * Open-cursor tracking, so a pool taking a connection back can close the
+ * result sets and row streams its last borrower left open.  @invalidate
+ * receives the owner (a strong reference held for the call) and must
+ * close its cursor through orm_connection_run_confined().
+ */
+typedef void (*OrmConnectionCursorInvalidate) (gpointer cursor);
+
+G_GNUC_INTERNAL
+void orm_connection_track_cursor (OrmConnection                 *self,
+                                  GObject                       *cursor,
+                                  OrmConnectionCursorInvalidate  invalidate);
+
+G_GNUC_INTERNAL
+void orm_connection_untrack_cursor (OrmConnection *self,
+                                    gpointer       cursor);
+
+/*
+ * Reads every remaining row of @self on its connection's thread, closes
+ * the cursor and lets go of the connection, so the result no longer
+ * needs it.  On failure the result is left closed.
+ */
+G_GNUC_INTERNAL
+gboolean orm_result_buffer (OrmResult  *self,
+                            GError    **error);
+
+G_GNUC_INTERNAL
+void orm_connection_query_buffered_async (OrmConnection       *self,
+                                          const gchar         *sql,
+                                          GList               *params,
+                                          GCancellable        *cancellable,
+                                          GAsyncReadyCallback  callback,
+                                          gpointer             user_data);
+
+G_GNUC_INTERNAL
 OrmDriverConnection * orm_connection_get_driver_connection (OrmConnection *self);
 
 G_GNUC_INTERNAL

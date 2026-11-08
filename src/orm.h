@@ -109,6 +109,7 @@
 #include "engine/orm-transaction.h"
 #include "migration/orm-migrator.h"
 #include "engine/orm-engine.h"
+#include "engine/orm-connection-pool.h"
 
 /* Inspection */
 #include "inspect/orm-inspector.h"

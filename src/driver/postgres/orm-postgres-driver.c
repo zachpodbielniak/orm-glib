@@ -768,6 +768,25 @@ orm_postgres_driver_connection_interrupt (OrmDriverConnection  *connection,
     return TRUE;
 }
 
+/*
+ * Idle means no transaction; INTRANS and INERROR both mean one is open,
+ * the second one failed and waiting for a ROLLBACK.  ACTIVE (a command in
+ * flight) cannot be seen here, since this runs where the commands do.
+ */
+static gboolean
+orm_postgres_driver_connection_in_transaction (OrmDriverConnection *connection)
+{
+    OrmPostgresDriverConnection *self = ORM_POSTGRES_DRIVER_CONNECTION (connection);
+    PGTransactionStatusType      status;
+
+    if (self->conn == NULL)
+        return FALSE;
+
+    status = PQtransactionStatus (self->conn);
+
+    return status == PQTRANS_INTRANS || status == PQTRANS_INERROR;
+}
+
 static void
 orm_postgres_driver_connection_finalize (GObject *object)
 {
@@ -791,6 +810,7 @@ orm_postgres_driver_connection_class_init (OrmPostgresDriverConnectionClass *kla
     conn_class->get_changes = orm_postgres_driver_connection_get_changes;
     conn_class->set_isolation_level = orm_postgres_driver_connection_set_isolation_level;
     conn_class->interrupt = orm_postgres_driver_connection_interrupt;
+    conn_class->in_transaction = orm_postgres_driver_connection_in_transaction;
 
     /*
      * OrmPostgresDriverConnection::notice:

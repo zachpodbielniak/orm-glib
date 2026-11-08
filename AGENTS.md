@@ -100,7 +100,7 @@ src/
 ├── core/           # Core types (OrmValue, errors, enums)
 ├── types/          # SQL type system (OrmSqlType hierarchy)
 ├── schema/         # Schema definitions (OrmTable, OrmColumn)
-├── engine/         # Database connections (OrmEngine, OrmConnection)
+├── engine/         # Database connections (OrmEngine, OrmConnection, OrmConnectionPool)
 ├── migration/      # Explicit versioned schema runner (OrmMigrator)
 ├── dialect/        # Database-specific implementations
 ├── sql/            # SQL expression language
@@ -156,6 +156,19 @@ src/
 - [x] Explicit versioned migrations (`OrmMigration` / `OrmMigrator`)
 - [x] Per-step transactions, checksummed history, cooperative locking
 
+### Phase 10 (Complete)
+- [x] `OrmConnectionPool`: bounded, FIFO-fair leasing, sync and `GTask` API
+- [x] Reset on release (rollback, default isolation) with stale
+      `OrmTransaction` detection via a per-connection epoch
+- [x] Idle reaper and connection signals bound to a `GMainContext`
+- [x] Validation of idle connections, per-connection `init-sql`
+- [x] One-shot query results buffered on the worker, so kept results
+      hold no connection
+- [x] Release closes cursors left open and rolls back raw-SQL `BEGIN`s
+      (driver `in_transaction` vfunc); unref-instead-of-release recovers
+      the slot; double release cannot free the pool's reference
+- [x] SQLite connections default to a 5 s busy timeout
+
 ### Not implemented yet
 
 These are the gaps a caller notices, listed so nobody goes looking for an
@@ -172,10 +185,11 @@ API that is not there:
   backends, but only SQLite genuinely streams; `PQsetSingleRowMode` and
   `mysql_use_result` are not wired up, so on those two the whole result
   is still materialized before the first batch.
-- **Connection pooling.** Every `orm_engine_connect()` opens a new
-  connection, and `orm_engine_execute()` opens and closes one per call.
-  One connection means one worker thread, so parallelism means opening
-  more connections yourself -- see `docs/async.md`.
+- **Pool extras.** `OrmConnectionPool` (see `docs/connection-pool.md`)
+  has no pre-warming, no maximum connection lifetime, and no
+  `OrmSession` integration beyond acquiring a connection and building the
+  session on it.  `orm_engine_connect()` and `orm_engine_execute()` still
+  open a fresh connection per call; only the pool reuses them.
 - **Automatic schema diffs.** `OrmMigrator` runs explicit SQL or callback
   steps you write. There is no model-diff generator, and the DDL compiler
   still has no `ALTER TABLE`.

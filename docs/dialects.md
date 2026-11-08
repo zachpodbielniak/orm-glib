@@ -47,6 +47,12 @@ orm_engine_new ("sqlite:///./local.db", &error);
 orm_engine_new ("sqlite:///:memory:", &error);
 ```
 
+Every SQLite connection is opened with `PRAGMA foreign_keys = ON` and a
+5-second busy timeout: a statement that meets another connection's lock
+waits up to 5 s for it instead of failing at once with "database is
+locked" (SQLite's own default is not to wait). Change it per connection
+with `PRAGMA busy_timeout = N` in milliseconds; 0 restores fail-fast.
+
 ### PostgreSQL
 
 ```

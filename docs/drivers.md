@@ -34,13 +34,21 @@ OrmDriver                 stateless factory, one instance per backend
 per-database state.
 
 **`OrmDriverConnection`** — `close`, `execute`, `query`,
-`get_last_insert_id`, `get_changes`, `set_isolation_level`, `interrupt`.
+`get_last_insert_id`, `get_changes`, `set_isolation_level`, `interrupt`,
+`in_transaction`.
+
+`in_transaction` reports whether the backend has a transaction open,
+however it was begun — `sqlite3_get_autocommit()`, `PQtransactionStatus()`,
+or MySQL's `SERVER_STATUS_IN_TRANS`. A connection pool asks it on release
+so that a `BEGIN` sent as raw SQL is rolled back too. The default says
+`FALSE`, which a backend without the concept can leave alone.
 
 **`OrmDriverResult`** — `get_column_count`, `get_column_name`,
 `get_column_value_type`, `get_column_type_name`, `fetch_row`, `close`.
 
-All three vtables carry `gpointer _reserved[8]`, so methods can be added
-without breaking an out-of-tree driver's ABI.
+All three vtables carry reserved padding (`gpointer _reserved[8]`, of
+which `OrmDriverConnectionClass` has spent one on `in_transaction`), so
+methods can be added without breaking an out-of-tree driver's ABI.
 
 ### `fetch_row` returns NULL twice over
 

@@ -40,7 +40,25 @@
  * is therefore stashed and surfaced by orm_result_get_error(), which
  * lets a caller that cares tell a broken query from an empty one without
  * breaking one that does not.
+ *
+ * A result can also be buffered (orm_result_buffer(), used by the pool's
+ * one-shot queries): every row is read up front on the connection's
+ * thread, the column metadata is copied, the cursor is closed and the
+ * connection is let go.  From then on the result reads from memory and
+ * holds nothing of the connection's.
+ *
+ * While a cursor is open the connection tracks it, and a pool taking the
+ * connection back closes it (orm_result_invalidate()); reading on then
+ * reports an error rather than rows from a stale snapshot.
  */
+
+/* Column metadata, copied for a buffered result */
+typedef struct
+{
+    gchar        *name;
+    gchar        *type_name;
+    OrmValueType  value_type;
+} OrmResultColumn;
 
 struct _OrmResult
 {
@@ -59,9 +77,28 @@ struct _OrmResult
     GError          *error;
     gboolean         is_closed;
     gboolean         exhausted;
+
+    /* Buffered results only; both NULL otherwise */
+    GQueue          *rows;          /* OrmRow *, owned */
+    GArray          *columns;       /* OrmResultColumn */
 };
 
 G_DEFINE_TYPE (OrmResult, orm_result, G_TYPE_OBJECT)
+
+static void
+orm_result_column_clear (gpointer data)
+{
+    OrmResultColumn *column = (OrmResultColumn *) data;
+
+    g_free (column->name);
+    g_free (column->type_name);
+}
+
+static void
+orm_result_free_rows (GQueue *rows)
+{
+    g_queue_free_full (rows, g_object_unref);
+}
 
 static void
 orm_result_finalize (GObject *object)
@@ -73,6 +110,8 @@ orm_result_finalize (GObject *object)
     g_clear_object (&self->current_row);
     g_clear_object (&self->connection);
     g_clear_error (&self->error);
+    g_clear_pointer (&self->rows, orm_result_free_rows);
+    g_clear_pointer (&self->columns, g_array_unref);
 
     G_OBJECT_CLASS (orm_result_parent_class)->finalize (object);
 }
@@ -94,6 +133,32 @@ orm_result_init (OrmResult *self)
     self->error = NULL;
     self->is_closed = FALSE;
     self->exhausted = FALSE;
+    self->rows = NULL;
+    self->columns = NULL;
+}
+
+static void orm_result_close_work (gpointer data);
+
+/*
+ * Called by the connection when a pool takes it back with this result's
+ * cursor still open.  Closes the cursor where the connection's work runs
+ * and records why, so the next orm_result_next() fails visibly instead of
+ * quietly reporting the end of the rows.
+ */
+static void
+orm_result_invalidate (gpointer data)
+{
+    OrmResult *self = ORM_RESULT (data);
+
+    orm_connection_run_confined (self->connection, orm_result_close_work, self);
+
+    g_clear_object (&self->current_row);
+    self->exhausted = TRUE;
+
+    if (self->error == NULL)
+        self->error = g_error_new_literal (ORM_ERROR, ORM_ERROR_CONNECTION_CLOSED,
+                                           "Result is no longer readable: its "
+                                           "connection was returned to a pool");
 }
 
 /*
@@ -115,6 +180,8 @@ orm_result_new_for_driver (OrmConnection   *connection,
     self->connection = g_object_ref (connection);
     self->driver_result = driver_result;
 
+    orm_connection_track_cursor (connection, G_OBJECT (self), orm_result_invalidate);
+
     return self;
 }
 
@@ -132,6 +199,10 @@ orm_result_fetch_work (gpointer data)
 {
     OrmResultFetchWork *work = (OrmResultFetchWork *) data;
     OrmResult          *self = work->result;
+
+    /* A pool may have closed the cursor since the caller checked */
+    if (self->driver_result == NULL)
+        return;
 
     work->row = orm_driver_result_fetch_row (self->driver_result, &self->error);
 }
@@ -158,7 +229,19 @@ orm_result_next (OrmResult *self)
 
     g_clear_object (&self->current_row);
 
-    if (self->exhausted || self->driver_result == NULL)
+    if (self->exhausted)
+        return FALSE;
+
+    /* Buffered: rows are already here */
+    if (self->rows != NULL)
+    {
+        self->current_row = (OrmRow *) g_queue_pop_head (self->rows);
+        if (self->current_row == NULL)
+            self->exhausted = TRUE;
+        return self->current_row != NULL;
+    }
+
+    if (self->driver_result == NULL)
         return FALSE;
 
     /*
@@ -230,6 +313,9 @@ orm_result_get_column_count (OrmResult *self)
 {
     g_return_val_if_fail (ORM_IS_RESULT (self), 0);
 
+    if (self->columns != NULL)
+        return (gint) self->columns->len;
+
     if (self->driver_result == NULL)
         return 0;
 
@@ -255,6 +341,13 @@ orm_result_get_column_type (OrmResult *self,
 {
     g_return_val_if_fail (ORM_IS_RESULT (self), ORM_VALUE_NULL);
 
+    if (self->columns != NULL)
+    {
+        if (index < 0 || (guint) index >= self->columns->len)
+            return ORM_VALUE_NULL;
+        return g_array_index (self->columns, OrmResultColumn, index).value_type;
+    }
+
     if (self->driver_result == NULL)
         return ORM_VALUE_NULL;
 
@@ -277,6 +370,13 @@ orm_result_get_column_type_name (OrmResult *self,
 {
     g_return_val_if_fail (ORM_IS_RESULT (self), NULL);
 
+    if (self->columns != NULL)
+    {
+        if (index < 0 || (guint) index >= self->columns->len)
+            return NULL;
+        return g_array_index (self->columns, OrmResultColumn, index).type_name;
+    }
+
     if (self->driver_result == NULL)
         return NULL;
 
@@ -295,6 +395,13 @@ orm_result_get_column_name (OrmResult *self,
                             gint       index)
 {
     g_return_val_if_fail (ORM_IS_RESULT (self), NULL);
+
+    if (self->columns != NULL)
+    {
+        if (index < 0 || (guint) index >= self->columns->len)
+            return NULL;
+        return g_array_index (self->columns, OrmResultColumn, index).name;
+    }
 
     if (self->driver_result == NULL)
         return NULL;
@@ -385,6 +492,9 @@ orm_result_close_work (gpointer data)
     {
         orm_driver_result_close (self->driver_result);
         g_clear_object (&self->driver_result);
+
+        if (self->connection != NULL)
+            orm_connection_untrack_cursor (self->connection, self);
     }
 }
 
@@ -399,11 +509,105 @@ orm_result_close (OrmResult *self)
      * the same database is precisely what the confinement rule exists to
      * prevent.
      */
-    if (self->connection != NULL)
+    /*
+     * With no cursor left -- buffered, invalidated by a pool, or closed
+     * already -- there is nothing to hand the worker.  Skipping it
+     * matters: a result freed after its connection went back to a pool
+     * would otherwise queue behind the next borrower's statements.
+     */
+    if (self->connection != NULL && self->driver_result != NULL)
         orm_connection_run_confined (self->connection, orm_result_close_work, self);
     else
         orm_result_close_work (self);
 
+    g_clear_pointer (&self->rows, orm_result_free_rows);
     self->is_closed = TRUE;
     self->exhausted = TRUE;
+}
+
+/*
+ * The confined half of orm_result_buffer(): copy the column metadata,
+ * read every row, close the cursor.
+ */
+typedef struct
+{
+    OrmResult *result;
+    GQueue    *rows;
+    GArray    *columns;
+    GError    *error;
+} OrmResultBufferWork;
+
+static void
+orm_result_buffer_work (gpointer data)
+{
+    OrmResultBufferWork *work = (OrmResultBufferWork *) data;
+    OrmResult           *self = work->result;
+    OrmResultColumn      column;
+    OrmRow              *row;
+    gint                 count;
+    gint                 i;
+
+    if (self->driver_result == NULL)
+    {
+        g_set_error_literal (&work->error, ORM_ERROR, ORM_ERROR_INVALID_OPERATION,
+                             "Result is closed");
+        return;
+    }
+
+    count = orm_driver_result_get_column_count (self->driver_result);
+    work->columns = g_array_sized_new (FALSE, TRUE, sizeof (OrmResultColumn),
+                                       (guint) MAX (count, 0));
+    g_array_set_clear_func (work->columns, orm_result_column_clear);
+
+    for (i = 0; i < count; i++)
+    {
+        column.name = g_strdup (orm_driver_result_get_column_name (self->driver_result, i));
+        column.type_name = g_strdup (orm_driver_result_get_column_type_name (self->driver_result, i));
+        column.value_type = orm_driver_result_get_column_value_type (self->driver_result, i);
+        g_array_append_val (work->columns, column);
+    }
+
+    work->rows = g_queue_new ();
+    while ((row = orm_driver_result_fetch_row (self->driver_result, &work->error)) != NULL)
+        g_queue_push_tail (work->rows, row);
+
+    orm_result_close_work (self);
+}
+
+/*
+ * Internal: reads the whole result into memory and lets go of the
+ * connection.  See orm-engine-private.h.
+ */
+gboolean
+orm_result_buffer (OrmResult  *self,
+                   GError    **error)
+{
+    OrmResultBufferWork work;
+
+    g_return_val_if_fail (ORM_IS_RESULT (self), FALSE);
+    g_return_val_if_fail (self->rows == NULL, FALSE);
+    g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+    work.result = self;
+    work.rows = NULL;
+    work.columns = NULL;
+    work.error = NULL;
+
+    orm_connection_run_confined (self->connection, orm_result_buffer_work, &work);
+
+    if (work.error != NULL)
+    {
+        g_clear_pointer (&work.rows, orm_result_free_rows);
+        g_clear_pointer (&work.columns, g_array_unref);
+        self->is_closed = TRUE;
+        self->exhausted = TRUE;
+        g_propagate_error (error, work.error);
+        return FALSE;
+    }
+
+    self->rows = work.rows;
+    self->columns = work.columns;
+    g_clear_object (&self->connection);
+
+    return TRUE;
 }

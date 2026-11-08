@@ -90,6 +90,27 @@ struct _OrmConnection
     gboolean             is_open;
     gboolean             in_transaction;
     OrmIsolationLevel    isolation_level;
+    OrmIsolationLevel    default_isolation;
+
+    /*
+     * Bumped whenever an open transaction is abandoned on this connection
+     * from outside OrmTransaction -- today, only when a pool takes the
+     * connection back.  An OrmTransaction remembers the value it began
+     * under and refuses to act once it has moved, so a stale one cannot
+     * commit or roll back the next borrower's work.
+     */
+    gint                 transaction_epoch;
+
+    /*
+     * Result sets and row streams with a backend cursor still open on
+     * this connection, as OrmConnectionCursor entries.  Weak, because a
+     * cursor's owner decides when it dies; tracked at all so that a pool
+     * taking the connection back can close the cursors its last borrower
+     * left open.  A SQLite statement left mid-step keeps its read
+     * snapshot, so the next borrower would otherwise read stale data.
+     */
+    GMutex               cursor_lock;
+    GSList              *cursors;
 
     /*
      * Guards the fields a second thread can reach: the driver connection,
@@ -115,6 +136,27 @@ enum {
 static guint signals[N_SIGNALS];
 
 G_DEFINE_TYPE (OrmConnection, orm_connection, G_TYPE_OBJECT)
+
+/*
+ * One tracked cursor: a weak reference to its owner, the owner's address
+ * to find the entry again once the weak reference has been cleared by
+ * finalization, and how to shut it.
+ */
+typedef struct
+{
+    GWeakRef                       ref;
+    gpointer                       key;
+    OrmConnectionCursorInvalidate  invalidate;
+} OrmConnectionCursor;
+
+static void
+orm_connection_cursor_free (gpointer data)
+{
+    OrmConnectionCursor *cursor = (OrmConnectionCursor *) data;
+
+    g_weak_ref_clear (&cursor->ref);
+    g_free (cursor);
+}
 
 static void orm_connection_set_state (OrmConnection      *self,
                                       OrmConnectionState  state);
@@ -317,6 +359,8 @@ orm_connection_finalize (GObject *object)
     orm_connection_close (self);
 
     g_clear_pointer (&self->owner_context, g_main_context_unref);
+    g_slist_free_full (g_steal_pointer (&self->cursors), orm_connection_cursor_free);
+    g_mutex_clear (&self->cursor_lock);
     g_mutex_clear (&self->lock);
 
     G_OBJECT_CLASS (orm_connection_parent_class)->finalize (object);
@@ -378,11 +422,15 @@ orm_connection_init (OrmConnection *self)
     self->is_open = FALSE;
     self->in_transaction = FALSE;
     self->isolation_level = ORM_ISOLATION_SERIALIZABLE;
+    self->default_isolation = ORM_ISOLATION_SERIALIZABLE;
+    self->transaction_epoch = 0;
+    self->cursors = NULL;
     self->state = ORM_CONNECTION_CONNECTING;
     self->worker = NULL;
     self->in_finalize = FALSE;
 
     g_mutex_init (&self->lock);
+    g_mutex_init (&self->cursor_lock);
 
     /*
      * Captured here rather than at the first emission because "the
@@ -464,6 +512,7 @@ orm_connection_new (OrmEngine  *engine,
         self->isolation_level = ORM_ISOLATION_SERIALIZABLE;
         break;
     }
+    self->default_isolation = self->isolation_level;
 
     /*
      * A driver with a channel for out-of-band server messages advertises
@@ -1008,6 +1057,212 @@ orm_connection_set_in_transaction (OrmConnection *self,
 }
 
 /*
+ * Internal: the transaction epoch an OrmTransaction checks itself against.
+ */
+gint
+orm_connection_get_transaction_epoch (OrmConnection *self)
+{
+    g_return_val_if_fail (ORM_IS_CONNECTION (self), 0);
+    return g_atomic_int_get (&self->transaction_epoch);
+}
+
+/*
+ * Internal: starts tracking an open backend cursor owned by @cursor, an
+ * OrmResult or OrmRowStream.  @invalidate is how
+ * orm_connection_reset_for_reuse() shuts it; the owner calls
+ * orm_connection_untrack_cursor() when it closes the cursor itself.
+ */
+void
+orm_connection_track_cursor (OrmConnection                 *self,
+                             GObject                       *cursor,
+                             OrmConnectionCursorInvalidate  invalidate)
+{
+    OrmConnectionCursor *entry;
+
+    g_return_if_fail (ORM_IS_CONNECTION (self));
+    g_return_if_fail (G_IS_OBJECT (cursor));
+    g_return_if_fail (invalidate != NULL);
+
+    entry = g_new0 (OrmConnectionCursor, 1);
+    g_weak_ref_init (&entry->ref, cursor);
+    entry->key = cursor;
+    entry->invalidate = invalidate;
+
+    g_mutex_lock (&self->cursor_lock);
+    self->cursors = g_slist_prepend (self->cursors, entry);
+    g_mutex_unlock (&self->cursor_lock);
+}
+
+/*
+ * Internal: stops tracking @cursor.  Safe to call for one that is not
+ * tracked, which is the normal case once a reset has invalidated it.
+ * Matches by address, because during finalization the weak reference
+ * has already been cleared.
+ */
+void
+orm_connection_untrack_cursor (OrmConnection *self,
+                               gpointer       cursor)
+{
+    OrmConnectionCursor *entry = NULL;
+    GSList              *l;
+
+    g_return_if_fail (ORM_IS_CONNECTION (self));
+
+    g_mutex_lock (&self->cursor_lock);
+
+    for (l = self->cursors; l != NULL; l = l->next)
+    {
+        if (((OrmConnectionCursor *) l->data)->key == cursor)
+        {
+            entry = (OrmConnectionCursor *) l->data;
+            self->cursors = g_slist_delete_link (self->cursors, l);
+            break;
+        }
+    }
+
+    g_mutex_unlock (&self->cursor_lock);
+
+    if (entry != NULL)
+        orm_connection_cursor_free (entry);
+}
+
+/*
+ * Shuts every cursor still open on the connection.  The list is taken
+ * whole first, so the owners' own untrack calls -- made from inside
+ * @invalidate -- find nothing and the lock is never held across them.
+ * The strong reference from g_weak_ref_get() keeps an owner alive while
+ * it is being shut, even if its last other reference goes meanwhile.
+ *
+ * Returns: how many cursors were shut
+ */
+static guint
+orm_connection_invalidate_cursors (OrmConnection *self)
+{
+    GSList  *cursors;
+    GSList  *l;
+    guint    n_shut = 0;
+
+    g_mutex_lock (&self->cursor_lock);
+    cursors = g_steal_pointer (&self->cursors);
+    g_mutex_unlock (&self->cursor_lock);
+
+    for (l = cursors; l != NULL; l = l->next)
+    {
+        OrmConnectionCursor *entry = (OrmConnectionCursor *) l->data;
+        g_autoptr(GObject)   owner = NULL;
+
+        owner = (GObject *) g_weak_ref_get (&entry->ref);
+        if (owner == NULL)
+            continue;
+
+        entry->invalidate (owner);
+        n_shut++;
+    }
+
+    g_slist_free_full (cursors, orm_connection_cursor_free);
+
+    return n_shut;
+}
+
+/*
+ * Asks the backend whether a transaction is open.  Runs confined: on
+ * MySQL the answer is a field the worker writes with every statement.
+ */
+typedef struct
+{
+    OrmDriverConnection *driver_conn;
+    gboolean             in_transaction;
+} OrmConnectionTxnProbe;
+
+static void
+orm_connection_probe_transaction (gpointer data)
+{
+    OrmConnectionTxnProbe *probe = (OrmConnectionTxnProbe *) data;
+
+    probe->in_transaction = orm_driver_connection_in_transaction (probe->driver_conn);
+}
+
+/*
+ * Internal: puts a connection back the way a fresh one would be, so the
+ * next borrower inherits nothing from the last.
+ *
+ * Three things leak between borrowers if left alone, and all three are
+ * undone here:
+ *
+ *  - Open cursors.  Results and row streams the last borrower still holds
+ *    are closed; reading them afterwards reports an error instead of
+ *    returning rows from a snapshot taken before the next borrower's
+ *    writes.
+ *  - An open transaction, which would make the next borrower's
+ *    statements part of someone else's unit of work.  The backend is
+ *    asked rather than trusted to OrmConnection's own bookkeeping, so a
+ *    BEGIN issued as raw SQL is rolled back too.
+ *  - A session isolation level other than the backend's default.
+ *
+ * Other session state changed with raw SQL -- a SET of some other
+ * variable, a temporary table -- is not visible here and is not reset.
+ *
+ * Returns: %FALSE if the connection should be discarded rather than reused
+ */
+gboolean
+orm_connection_reset_for_reuse (OrmConnection  *self,
+                                GError        **error)
+{
+    OrmConnectionTxnProbe probe;
+    gboolean              ok;
+    guint                 n_shut;
+
+    g_return_val_if_fail (ORM_IS_CONNECTION (self), FALSE);
+    g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+    if (!self->is_open ||
+        orm_connection_get_state (self) == ORM_CONNECTION_CLOSED)
+    {
+        g_set_error (error, ORM_ERROR, ORM_ERROR_CONNECTION_CLOSED,
+                     "Connection is closed");
+        return FALSE;
+    }
+
+    /* --- Cursors first: a SQLite ROLLBACK can trip over a live statement --- */
+    n_shut = orm_connection_invalidate_cursors (self);
+    if (n_shut > 0)
+        g_debug ("OrmConnection: closed %u cursor(s) left open by the last "
+                 "borrower", n_shut);
+
+    /*
+     * --- Transaction ---
+     *
+     * Roll back before touching the isolation level: on PostgreSQL a
+     * failed transaction refuses every statement until it ends, including
+     * the SET below.  The epoch moves whether or not the rollback worked,
+     * because either way the transaction is over as far as its
+     * OrmTransaction is concerned.
+     */
+    probe.driver_conn = self->driver_conn;
+    probe.in_transaction = FALSE;
+    if (probe.driver_conn != NULL)
+        orm_connection_run_confined (self, orm_connection_probe_transaction, &probe);
+
+    if (self->in_transaction || probe.in_transaction)
+    {
+        ok = orm_connection_execute (self, "ROLLBACK", error);
+        self->in_transaction = FALSE;
+        g_atomic_int_inc (&self->transaction_epoch);
+
+        if (!ok)
+            return FALSE;
+    }
+
+    /* --- Isolation level --- */
+    if (self->isolation_level != self->default_isolation)
+        return orm_connection_set_isolation_level (self,
+                                                   self->default_isolation,
+                                                   error);
+
+    return TRUE;
+}
+
+/*
  * Internal: the driver connection, for the layers that need to reach the
  * backend directly (OrmResult's streaming path, the inspector).
  */
@@ -1337,6 +1592,7 @@ typedef struct
     gchar         *sql;
     GList         *params;
     OrmQueryFlags  flags;
+    gboolean       buffer;      /* Read every row here, before returning */
 } OrmStatementJob;
 
 static GList *
@@ -1448,13 +1704,28 @@ orm_connection_query_job (gpointer  data,
      * that has to happen on the connection's thread like everything else.
      */
     if ((job->flags & ORM_QUERY_FLAGS_STREAMING) != 0)
+    {
         g_task_return_pointer (task,
                                orm_row_stream_new_for_driver (self, driver_result),
                                g_object_unref);
+    }
+    else if (job->buffer)
+    {
+        g_autoptr(OrmResult) rows = NULL;
+
+        /* On the worker already, so the buffering runs inline here */
+        rows = orm_result_new_for_driver (self, driver_result);
+        if (orm_result_buffer (rows, &error))
+            g_task_return_pointer (task, g_steal_pointer (&rows), g_object_unref);
+        else
+            g_task_return_error (task, error);
+    }
     else
+    {
         g_task_return_pointer (task,
                                orm_result_new_for_driver (self, driver_result),
                                g_object_unref);
+    }
 }
 
 static void
@@ -1563,6 +1834,36 @@ orm_connection_query_async (OrmConnection       *self,
                                  orm_statement_job_new (sql, params,
                                                         ORM_QUERY_FLAGS_NONE),
                                  orm_statement_job_free);
+}
+
+/*
+ * Internal: orm_connection_query_async() whose result is read in full on
+ * the worker before it is returned (see orm_result_buffer()), so the
+ * caller gets rows that no longer need the connection.  Finish with
+ * orm_connection_query_finish().
+ */
+void
+orm_connection_query_buffered_async (OrmConnection       *self,
+                                     const gchar         *sql,
+                                     GList               *params,
+                                     GCancellable        *cancellable,
+                                     GAsyncReadyCallback  callback,
+                                     gpointer             user_data)
+{
+    g_autoptr(GTask)  task = NULL;
+    OrmStatementJob  *job;
+
+    g_return_if_fail (ORM_IS_CONNECTION (self));
+    g_return_if_fail (sql != NULL);
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_connection_query_async);
+
+    job = orm_statement_job_new (sql, params, ORM_QUERY_FLAGS_NONE);
+    job->buffer = TRUE;
+
+    orm_connection_submit_async (self, task, orm_connection_query_job,
+                                 job, orm_statement_job_free);
 }
 
 /**

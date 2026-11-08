@@ -35,6 +35,7 @@ MIGRATION_SRCS := \
 ENGINE_SRCS := \
 	src/engine/orm-engine.c \
 	src/engine/orm-connection.c \
+	src/engine/orm-connection-pool.c \
 	src/engine/orm-transaction.c \
 	src/engine/orm-result.c \
 	src/engine/orm-row.c \
@@ -203,6 +204,7 @@ PUBLIC_HEADERS_BASE := \
 	src/sql/orm-delete.h \
 	src/engine/orm-engine.h \
 	src/engine/orm-connection.h \
+	src/engine/orm-connection-pool.h \
 	src/engine/orm-transaction.h \
 	src/engine/orm-result.h \
 	src/engine/orm-row.h \
@@ -271,6 +273,7 @@ TEST_SRCS := \
 	tests/test-inspector.c \
 	tests/test-isolation.c \
 	tests/test-async.c \
+	tests/test-connection-pool.c \
 	tests/test-dialect-sqlite.c \
 	tests/test-expression.c \
 	tests/test-select.c \
@@ -291,12 +294,14 @@ SQLITE_EXAMPLE_SRCS := \
 	examples/sqlite/basic-crud.c \
 	examples/sqlite/query-builder.c \
 	examples/sqlite/relationships.c \
-	examples/sqlite/migrations.c
+	examples/sqlite/migrations.c \
+	examples/sqlite/connection-pool.c
 SQLITE_EXAMPLE_BINS := \
 	$(EXAMPLE_DIR)/sqlite-basic-crud \
 	$(EXAMPLE_DIR)/sqlite-query-builder \
 	$(EXAMPLE_DIR)/sqlite-relationships \
-	$(EXAMPLE_DIR)/sqlite-migrations
+	$(EXAMPLE_DIR)/sqlite-migrations \
+	$(EXAMPLE_DIR)/sqlite-connection-pool
 else
 SQLITE_EXAMPLE_SRCS :=
 SQLITE_EXAMPLE_BINS :=

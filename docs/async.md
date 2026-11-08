@@ -51,9 +51,9 @@ order it was submitted. Three queries started in a row complete in that
 order, always — which matters, because "insert the row, then read it
 back" is a thing people write.
 
-If you want two queries to run at the same time, open two connections.
-That is the honest unit of parallelism and it is what a connection pool
-would give you anyway.
+If you want two queries to run at the same time, use two connections.
+That is the honest unit of parallelism, and `OrmConnectionPool` manages
+it for you -- see [connection-pool.md](connection-pool.md).
 
 ### Mixing with the synchronous API
 
@@ -243,5 +243,6 @@ it once without asking what you are connected to.
   `PQsetSingleRowMode` and `mysql_use_result` are not wired up. The
   streaming API works correctly on both — it just does not save memory
   there yet.
-- **No connection pool.** One worker per connection is the concurrency
-  model; more parallelism means more connections, opened by you.
+- **No parallelism on one connection.** One worker per connection is the
+  concurrency model; more parallelism means more connections, which
+  `OrmConnectionPool` provides -- see [connection-pool.md](connection-pool.md).
