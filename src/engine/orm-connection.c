@@ -757,6 +757,47 @@ orm_connection_query_with_params (OrmConnection  *self,
 }
 
 /**
+ * orm_connection_query_prepared:
+ * @self: An #OrmConnection
+ * @sql: SQL query with placeholders
+ * @params: (element-type OrmValue) (nullable): Parameter values
+ * @error: Return location for error
+ *
+ * Executes a parameterized query, prepared once per connection and SQL
+ * text where the backend supports it.
+ *
+ * Returns: (transfer full) (nullable): A new #OrmResult, or %NULL on error
+ */
+OrmResult *
+orm_connection_query_prepared (OrmConnection  *self,
+                               const gchar    *sql,
+                               GList          *params,
+                               GError        **error)
+{
+    OrmStatementWork work;
+
+    g_return_val_if_fail (ORM_IS_CONNECTION (self), NULL);
+    g_return_val_if_fail (sql != NULL, NULL);
+    g_return_val_if_fail (self->is_open, NULL);
+    g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+    work.connection = self;
+    work.sql = sql;
+    work.params = params;
+    work.flags = ORM_QUERY_FLAGS_PREPARED;
+    work.error = error;
+    work.ok = FALSE;
+    work.result = NULL;
+
+    orm_connection_run_confined (self, orm_connection_query_work, &work);
+
+    if (work.result == NULL)
+        return NULL;
+
+    return orm_result_new_for_driver (self, work.result);
+}
+
+/**
  * orm_connection_begin_transaction:
  * @self: An #OrmConnection
  * @error: Return location for error

@@ -258,6 +258,8 @@ typedef enum {
  * OrmQueryFlags:
  * @ORM_QUERY_FLAGS_NONE: No special handling
  * @ORM_QUERY_FLAGS_STREAMING: Ask the backend to deliver rows incrementally
+ * @ORM_QUERY_FLAGS_PREPARED: Keep the statement prepared on this connection
+ *   and reuse it when the same SQL text runs again
  *
  * Options for how a query's results are produced.
  *
@@ -268,10 +270,15 @@ typedef enum {
  * until it is drained or closed. So the flag is opt-in, for the caller
  * who is about to read a million rows and does not want them all in
  * memory first.
+ *
+ * Preparing is a request too. PostgreSQL prepares the statement once per
+ * connection and SQL text, so a statement that is costly to plan is
+ * planned less often. The other backends run the query as usual.
  */
 typedef enum {
     ORM_QUERY_FLAGS_NONE      = 0,
-    ORM_QUERY_FLAGS_STREAMING = 1 << 0
+    ORM_QUERY_FLAGS_STREAMING = 1 << 0,
+    ORM_QUERY_FLAGS_PREPARED  = 1 << 1
 } OrmQueryFlags;
 
 /**

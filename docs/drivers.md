@@ -94,6 +94,23 @@ A streaming result holds its connection busy until drained or closed, so
 the flag is opt-in rather than the default. If you want page semantics
 instead, use SQL `LIMIT`/`OFFSET` on a normal query.
 
+## Prepared statements
+
+`ORM_QUERY_FLAGS_PREPARED`, which `orm_connection_query_prepared()` sets,
+asks the backend to keep a statement prepared on its connection. It is a
+request too:
+
+- **PostgreSQL** prepares each SQL text once per connection (`PQprepare`)
+  and runs it with `PQexecPrepared` after that. The server parses and
+  plans the statement less often, which counts for a long statement on
+  little data. At most 64 texts are kept per connection; more run
+  unprepared. A statement the server dropped (`DEALLOCATE`) is prepared
+  again.
+- **SQLite** and **MySQL** run the query as usual.
+
+The SQL text is the cache key. Build it from a fixed set of shapes and
+pass every value as a parameter.
+
 ## Adding a backend
 
 Out of tree, with no changes to orm-glib:

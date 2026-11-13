@@ -274,6 +274,7 @@ TEST_SRCS := \
 	tests/test-isolation.c \
 	tests/test-async.c \
 	tests/test-connection-pool.c \
+	tests/test-prepared.c \
 	tests/test-dialect-sqlite.c \
 	tests/test-expression.c \
 	tests/test-select.c \

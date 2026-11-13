@@ -364,7 +364,12 @@ struct _OrmPostgresDriverConnection
     PGconn              *conn;
     PGcancel            *cancel;
     gint                 last_changes;
+    GHashTable          *prepared;      /* SQL text -> statement name */
+    guint                next_prepared; /* for the next statement name */
 };
+
+/* Prepared statements kept on one connection; more texts run unprepared. */
+#define ORM_POSTGRES_MAX_PREPARED 64
 
 G_DEFINE_FINAL_TYPE (OrmPostgresDriverConnection, orm_postgres_driver_connection,
                      ORM_TYPE_DRIVER_CONNECTION)
@@ -558,6 +563,10 @@ orm_postgres_driver_connection_close (OrmDriverConnection *connection)
         PQfinish (self->conn);
         self->conn = NULL;
     }
+
+    /* Prepared statements belong to the session that just ended. */
+    if (self->prepared != NULL)
+        g_hash_table_remove_all (self->prepared);
 }
 
 static gboolean
@@ -626,6 +635,71 @@ orm_postgres_driver_connection_execute (OrmDriverConnection  *connection,
     return TRUE;
 }
 
+/*
+ * Runs @sql as a statement prepared on this connection: PQprepare the
+ * first time a text is seen, PQexecPrepared after that, so the server
+ * parses and plans it once rather than on every call.
+ *
+ * A protocol-level prepared statement is not transactional: it survives
+ * a ROLLBACK and lasts until the session ends or someone runs DEALLOCATE.
+ * If the server no longer has it (SQLSTATE 26000), it is prepared once
+ * more.  A text that fails to prepare is not remembered, and past
+ * ORM_POSTGRES_MAX_PREPARED texts the query runs unprepared.
+ */
+static PGresult *
+orm_postgres_exec_prepared (OrmPostgresDriverConnection *self,
+                            const gchar                 *sql,
+                            gint                         n_params,
+                            const gchar * const         *param_strings)
+{
+    const gchar *name;
+    PGresult    *res;
+    gint         attempt;
+
+    for (attempt = 0; attempt < 2; attempt++)
+    {
+        const gchar *state;
+
+        name = g_hash_table_lookup (self->prepared, sql);
+
+        if (name == NULL)
+        {
+            gchar *fresh;
+
+            if (g_hash_table_size (self->prepared) >= ORM_POSTGRES_MAX_PREPARED)
+                return PQexecParams (self->conn, sql, n_params, NULL,
+                                     param_strings, NULL, NULL, 0);
+
+            fresh = g_strdup_printf ("orm_p%u", ++self->next_prepared);
+            res = PQprepare (self->conn, fresh, sql, 0, NULL);
+
+            if (PQresultStatus (res) != PGRES_COMMAND_OK)
+            {
+                g_free (fresh);
+                return res;
+            }
+
+            PQclear (res);
+            g_hash_table_insert (self->prepared, g_strdup (sql), fresh);
+            name = fresh;
+        }
+
+        res = PQexecPrepared (self->conn, name, n_params, param_strings,
+                              NULL, NULL, 0);
+
+        state = PQresultErrorField (res, PG_DIAG_SQLSTATE);
+        if (attempt > 0 || g_strcmp0 (state, "26000") != 0)
+            return res;
+
+        /* Gone from the server (DEALLOCATE): forget it and prepare again. */
+        PQclear (res);
+        g_hash_table_remove (self->prepared, sql);
+    }
+
+    g_assert_not_reached ();
+    return NULL;
+}
+
 static OrmDriverResult *
 orm_postgres_driver_connection_query (OrmDriverConnection  *connection,
                                       const gchar          *sql,
@@ -648,14 +722,18 @@ orm_postgres_driver_connection_query (OrmDriverConnection  *connection,
      * collects the whole result before returning, and single-row mode is
      * only reachable from the asynchronous send path.
      */
-    res = PQexecParams (self->conn,
-                        sql,
-                        n_params,
-                        NULL,        /* paramTypes - let the server infer */
-                        (const gchar * const *) param_strings,
-                        NULL,        /* paramLengths */
-                        NULL,        /* paramFormats */
-                        0);          /* resultFormat - text */
+    if ((flags & ORM_QUERY_FLAGS_PREPARED) != 0)
+        res = orm_postgres_exec_prepared (self, sql, n_params,
+                                          (const gchar * const *) param_strings);
+    else
+        res = PQexecParams (self->conn,
+                            sql,
+                            n_params,
+                            NULL,        /* paramTypes - let the server infer */
+                            (const gchar * const *) param_strings,
+                            NULL,        /* paramLengths */
+                            NULL,        /* paramFormats */
+                            0);          /* resultFormat - text */
 
     orm_postgres_params_free (param_strings, n_params);
 
@@ -790,7 +868,10 @@ orm_postgres_driver_connection_in_transaction (OrmDriverConnection *connection)
 static void
 orm_postgres_driver_connection_finalize (GObject *object)
 {
+    OrmPostgresDriverConnection *self = ORM_POSTGRES_DRIVER_CONNECTION (object);
+
     orm_postgres_driver_connection_close (ORM_DRIVER_CONNECTION (object));
+    g_clear_pointer (&self->prepared, g_hash_table_unref);
 
     G_OBJECT_CLASS (orm_postgres_driver_connection_parent_class)->finalize (object);
 }
@@ -834,6 +915,8 @@ orm_postgres_driver_connection_init (OrmPostgresDriverConnection *self)
 {
     self->conn = NULL;
     self->cancel = NULL;
+    self->prepared = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    self->next_prepared = 0;
 }
 
 /* ------------------------------------------------------------------ */

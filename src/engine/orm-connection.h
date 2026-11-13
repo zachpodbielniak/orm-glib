@@ -167,6 +167,28 @@ OrmResult * orm_connection_query_with_params (OrmConnection  *self,
                                               GError        **error);
 
 /*
+ * orm_connection_query_prepared:
+ * @self: An #OrmConnection
+ * @sql: SQL query with placeholders
+ * @params: (element-type OrmValue) (nullable): Parameter values
+ * @error: Return location for error
+ *
+ * Like orm_connection_query_with_params(), but asks the backend to keep
+ * the statement prepared on this connection (%ORM_QUERY_FLAGS_PREPARED).
+ * The SQL text is the key: build it from a fixed set of shapes and pass
+ * every value as a parameter, or the connection collects statements.
+ * PostgreSQL keeps at most 64 per connection and runs further texts
+ * unprepared. A prepared statement outlives the borrower when the
+ * connection goes back to an #OrmConnectionPool.
+ *
+ * Returns: (transfer full) (nullable): A new #OrmResult, or %NULL on error
+ */
+OrmResult * orm_connection_query_prepared (OrmConnection  *self,
+                                           const gchar    *sql,
+                                           GList          *params,
+                                           GError        **error);
+
+/*
  * orm_connection_begin_transaction:
  * @self: An #OrmConnection
  * @error: Return location for error
