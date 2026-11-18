@@ -162,6 +162,16 @@ on it today. PostgreSQL and MySQL still materialize the whole result
 before the stream is created, so on those two a stream buys you a
 responsive thread, not a smaller memory footprint.
 
+## Prepared statements
+
+`orm_connection_query_prepared_async()` is the same shape as
+`orm_connection_query_async()` and finishes with
+`orm_connection_query_prepared_finish()`. It sets
+`ORM_QUERY_FLAGS_PREPARED`. What that keeps, and which backends ignore
+it, is in [drivers.md](drivers.md). The synchronous
+`orm_connection_query_prepared()` is the same request on the calling
+thread.
+
 ## Connecting
 
 Opening is the slowest thing the library does over a network — a TCP

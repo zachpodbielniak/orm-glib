@@ -40,6 +40,11 @@
  * cursor being stepped.  ORM_QUERY_FLAGS_STREAMING is therefore accepted
  * and ignored; single-row mode needs the asynchronous PQsendQueryParams
  * path and arrives with the async work.
+ *
+ * ORM_QUERY_FLAGS_PREPARED keeps the statement.  Each distinct SQL text
+ * is sent with PQprepare once and PQexecPrepared after that, up to 64
+ * texts on the connection.  Past that, and for a text that fails to
+ * prepare, the query is PQexecParams like any other.
  */
 
 /* Internal: the engine holds the parsed connection parameters. */
@@ -645,6 +650,10 @@ orm_postgres_driver_connection_execute (OrmDriverConnection  *connection,
  * If the server no longer has it (SQLSTATE 26000), it is prepared once
  * more.  A text that fails to prepare is not remembered, and past
  * ORM_POSTGRES_MAX_PREPARED texts the query runs unprepared.
+ *
+ * PQprepare does not see the parameter values, so the server fixes their
+ * types from the SQL alone.  A cast or a typed column is what makes an
+ * otherwise ambiguous parameter prepare.
  */
 static PGresult *
 orm_postgres_exec_prepared (OrmPostgresDriverConnection *self,

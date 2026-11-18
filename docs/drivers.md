@@ -96,20 +96,33 @@ instead, use SQL `LIMIT`/`OFFSET` on a normal query.
 
 ## Prepared statements
 
-`ORM_QUERY_FLAGS_PREPARED`, which `orm_connection_query_prepared()` sets,
-asks the backend to keep a statement prepared on its connection. It is a
-request too:
+`ORM_QUERY_FLAGS_PREPARED`, which `orm_connection_query_prepared()` and
+`orm_connection_query_prepared_async()` set, asks the backend to keep a
+statement prepared on its connection. It is a request too:
 
-- **PostgreSQL** prepares each SQL text once per connection (`PQprepare`)
-  and runs it with `PQexecPrepared` after that. The server parses and
-  plans the statement less often, which counts for a long statement on
-  little data. At most 64 texts are kept per connection; more run
-  unprepared. A statement the server dropped (`DEALLOCATE`) is prepared
-  again.
-- **SQLite** and **MySQL** run the query as usual.
+- **PostgreSQL** prepares each distinct SQL text once per connection
+  (`PQprepare`) and runs it with `PQexecPrepared` after that. The text
+  is matched byte for byte, so build it from a fixed set of shapes and
+  pass every value as a parameter. The server parses and plans a long
+  statement less often. At most 64 texts are kept per connection;
+  further texts run unprepared, which stops a caller that builds SQL
+  from values from growing the cache without bound. A text that fails
+  to prepare is not kept. A statement the server dropped (`DEALLOCATE`,
+  `DISCARD ALL`, SQLSTATE 26000) is prepared again, once.
+  Protocol-level prepared statements survive `ROLLBACK` and end when
+  the connection closes. They also stay when a pooled connection is
+  released, so the next borrower can reuse them; see
+  [connection-pool.md](connection-pool.md).
+- **Parameter types are fixed when the statement is first prepared.**
+  `PQprepare` does not see the values, so the server decides the types
+  from the SQL. Write a cast (`$1::int`) or target a typed column when
+  the type is not already fixed. SQLite placeholders are `?`.
+  PostgreSQL placeholders are `$1`, `$2`, and so on.
+- **SQLite** and **MySQL** ignore the flag and run the query as usual.
 
-The SQL text is the cache key. Build it from a fixed set of shapes and
-pass every value as a parameter.
+The asynchronous form finishes with
+`orm_connection_query_prepared_finish()`. Parameters passed to it are
+copied before the call returns.
 
 ## Adding a backend
 

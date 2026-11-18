@@ -175,11 +175,19 @@ OrmResult * orm_connection_query_with_params (OrmConnection  *self,
  *
  * Like orm_connection_query_with_params(), but asks the backend to keep
  * the statement prepared on this connection (%ORM_QUERY_FLAGS_PREPARED).
- * The SQL text is the key: build it from a fixed set of shapes and pass
- * every value as a parameter, or the connection collects statements.
- * PostgreSQL keeps at most 64 per connection and runs further texts
- * unprepared. A prepared statement outlives the borrower when the
- * connection goes back to an #OrmConnectionPool.
+ *
+ * The SQL text is the cache key, matched byte for byte. Build it from a
+ * fixed set of shapes and pass every value as a parameter. PostgreSQL
+ * keeps at most 64 texts per connection and runs further texts
+ * unprepared; a text that fails to prepare is not kept. Parameter types
+ * are fixed from the SQL when the statement is first prepared, so write
+ * a cast or name a typed column when the type would otherwise be
+ * ambiguous. SQLite and MySQL run the query as usual.
+ *
+ * A prepared statement survives ROLLBACK, outlives the borrower when
+ * the connection goes back to an #OrmConnectionPool, and ends when the
+ * connection closes. The non-blocking form is
+ * orm_connection_query_prepared_async().
  *
  * Returns: (transfer full) (nullable): A new #OrmResult, or %NULL on error
  */
@@ -395,6 +403,41 @@ void orm_connection_query_async (OrmConnection       *self,
                                  GCancellable        *cancellable,
                                  GAsyncReadyCallback  callback,
                                  gpointer             user_data);
+
+/*
+ * orm_connection_query_prepared_async:
+ * @self: An #OrmConnection
+ * @sql: SQL query with placeholders
+ * @params: (element-type OrmValue) (nullable) (transfer none): Parameter
+ *   values, copied before the call returns
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async): Called when the result set is ready
+ * @user_data: (closure): Data for @callback
+ *
+ * Like orm_connection_query_async(), but with %ORM_QUERY_FLAGS_PREPARED.
+ * See orm_connection_query_prepared() for which backends keep the
+ * statement, and finish with orm_connection_query_prepared_finish().
+ */
+void orm_connection_query_prepared_async (OrmConnection       *self,
+                                          const gchar         *sql,
+                                          GList               *params,
+                                          GCancellable        *cancellable,
+                                          GAsyncReadyCallback  callback,
+                                          gpointer             user_data);
+
+/*
+ * orm_connection_query_prepared_finish:
+ * @self: An #OrmConnection
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_connection_query_prepared_async().
+ *
+ * Returns: (transfer full) (nullable): The result set, or %NULL on error
+ */
+OrmResult * orm_connection_query_prepared_finish (OrmConnection  *self,
+                                                  GAsyncResult   *result,
+                                                  GError        **error);
 
 /*
  * orm_connection_query_finish:

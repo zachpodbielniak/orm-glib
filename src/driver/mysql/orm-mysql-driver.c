@@ -50,6 +50,8 @@
  * ignored rather than being a second code path; mysql_use_result belongs
  * with the asynchronous work, where the caller can afford to keep the
  * connection tied up for the length of the iteration.
+ * ORM_QUERY_FLAGS_PREPARED is ignored too; the statement is not kept on
+ * the connection.
  */
 
 /* Internal: the engine holds the parsed connection parameters. */

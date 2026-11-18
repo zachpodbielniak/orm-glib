@@ -373,6 +373,7 @@ orm_query_flags_get_type (void)
         static const GFlagsValue values[] = {
             { ORM_QUERY_FLAGS_NONE, "ORM_QUERY_FLAGS_NONE", "none" },
             { ORM_QUERY_FLAGS_STREAMING, "ORM_QUERY_FLAGS_STREAMING", "streaming" },
+            { ORM_QUERY_FLAGS_PREPARED, "ORM_QUERY_FLAGS_PREPARED", "prepared" },
             { 0, NULL, NULL }
         };
         GType g_define_type_id;

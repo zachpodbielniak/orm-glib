@@ -138,11 +138,15 @@ inherit from you:
   `orm_connection_set_isolation_level()` changed it.
 
 What it cannot see, it cannot reset: a `SET` of some other session
-variable, a temporary table, a `PRAGMA`. Statements prepared with
-`orm_connection_query_prepared()` also stay: that is their purpose, so
-the next borrower runs the same text without planning it again. Use `init-sql` for
-per-connection setup instead of doing it on each lease, and do not change
-session state on a lease that you do not change back.
+variable, a temporary table, a `PRAGMA`. Use `init-sql` for
+per-connection setup instead of doing it on each lease, and do not
+change session state on a lease that you do not change back.
+
+Statements prepared with `orm_connection_query_prepared()` are kept
+across borrowers on purpose, so the next one runs the same text without
+planning it again. They end when the connection closes. `DEALLOCATE` or
+`DISCARD ALL` on a lease drops them on the server; the next prepared
+query prepares them again.
 
 A connection that is closed, lost its server, or fails to reset is closed
 and dropped; the next acquire opens a replacement.

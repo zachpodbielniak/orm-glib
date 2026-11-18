@@ -46,6 +46,8 @@
  * prepared statement being stepped, so rows arrive one at a time whether
  * or not the caller asked for streaming, and ORM_QUERY_FLAGS_STREAMING is
  * therefore a no-op here rather than a second code path.
+ * ORM_QUERY_FLAGS_PREPARED is ignored as well: the statement used to step
+ * one result is not kept for a later query.
  */
 
 /* Internal: the engine holds the parsed connection parameters. */

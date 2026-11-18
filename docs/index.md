@@ -14,6 +14,7 @@ orm-glib is a GObject/GLib ORM library for C, inspired by SQLAlchemy. It provide
 - **Migrations**: Explicit versioned schema changes (`OrmMigrator`)
 - **Async**: `GTask`-based queries with `GCancellable`, incremental row streaming, and connection state signals
 - **Connection pools**: `OrmConnectionPool` for parallel database work, integrated with your `GMainContext`
+- **Prepared statements**: PostgreSQL keeps a statement prepared on the connection (`orm_connection_query_prepared()`)
 - **GObject Introspection**: Full GIR support for language bindings
 
 ## Quick Example

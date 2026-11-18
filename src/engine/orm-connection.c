@@ -763,8 +763,15 @@ orm_connection_query_with_params (OrmConnection  *self,
  * @params: (element-type OrmValue) (nullable): Parameter values
  * @error: Return location for error
  *
- * Executes a parameterized query, prepared once per connection and SQL
- * text where the backend supports it.
+ * Like orm_connection_query_with_params(), but asks the backend to keep
+ * the statement prepared on this connection (%ORM_QUERY_FLAGS_PREPARED).
+ *
+ * The SQL text is the cache key, matched byte for byte. PostgreSQL keeps
+ * at most 64 texts per connection and runs further texts unprepared; a
+ * text that fails to prepare is not kept. Parameter types are fixed from
+ * the SQL at prepare time. SQLite and MySQL run the query as usual. A
+ * prepared statement survives ROLLBACK, stays with a pooled connection
+ * when it is released, and ends when the connection closes.
  *
  * Returns: (transfer full) (nullable): A new #OrmResult, or %NULL on error
  */
@@ -1242,6 +1249,11 @@ orm_connection_probe_transaction (gpointer data)
  *
  * Other session state changed with raw SQL -- a SET of some other
  * variable, a temporary table -- is not visible here and is not reset.
+ *
+ * Statements prepared with orm_connection_query_prepared() are kept on
+ * purpose, so the next borrower runs the same text without planning it
+ * again. DEALLOCATE or DISCARD ALL drops them on the server; the next
+ * prepared query prepares them again.
  *
  * Returns: %FALSE if the connection should be discarded rather than reused
  */
@@ -1875,6 +1887,62 @@ orm_connection_query_async (OrmConnection       *self,
                                  orm_statement_job_new (sql, params,
                                                         ORM_QUERY_FLAGS_NONE),
                                  orm_statement_job_free);
+}
+
+/**
+ * orm_connection_query_prepared_async:
+ * @self: An #OrmConnection
+ * @sql: SQL query with placeholders
+ * @params: (element-type OrmValue) (nullable) (transfer none): Parameter values
+ * @cancellable: (nullable): A #GCancellable
+ * @callback: (scope async) (nullable) (closure user_data): Called when the result set is ready
+ * @user_data: (nullable): Data for @callback
+ *
+ * Like orm_connection_query_async(), but with %ORM_QUERY_FLAGS_PREPARED.
+ * See orm_connection_query_prepared() for which backends keep the
+ * statement.  @params is copied before this returns.
+ */
+void
+orm_connection_query_prepared_async (OrmConnection       *self,
+                                     const gchar         *sql,
+                                     GList               *params,
+                                     GCancellable        *cancellable,
+                                     GAsyncReadyCallback  callback,
+                                     gpointer             user_data)
+{
+    g_autoptr(GTask) task = NULL;
+
+    g_return_if_fail (ORM_IS_CONNECTION (self));
+    g_return_if_fail (sql != NULL);
+
+    task = g_task_new (self, cancellable, callback, user_data);
+    g_task_set_source_tag (task, orm_connection_query_prepared_async);
+
+    orm_connection_submit_async (self, task, orm_connection_query_job,
+                                 orm_statement_job_new (sql, params,
+                                                        ORM_QUERY_FLAGS_PREPARED),
+                                 orm_statement_job_free);
+}
+
+/**
+ * orm_connection_query_prepared_finish:
+ * @self: An #OrmConnection
+ * @result: The #GAsyncResult
+ * @error: Return location for error
+ *
+ * Finishes orm_connection_query_prepared_async().
+ *
+ * Returns: (transfer full) (nullable): The result set, or %NULL on error
+ */
+OrmResult *
+orm_connection_query_prepared_finish (OrmConnection  *self,
+                                      GAsyncResult   *result,
+                                      GError        **error)
+{
+    g_return_val_if_fail (ORM_IS_CONNECTION (self), NULL);
+    g_return_val_if_fail (g_task_is_valid (result, self), NULL);
+
+    return (OrmResult *) g_task_propagate_pointer (G_TASK (result), error);
 }
 
 /*
